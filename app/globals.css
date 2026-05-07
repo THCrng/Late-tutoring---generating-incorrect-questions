@@ -12,6 +12,285 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── 导航栏 ── */
+.main-nav {
+  background: #1e293b;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  gap: 24px;
+}
+
+.nav-brand {
+  color: white;
+  font-size: 16px;
+  font-weight: 800;
+  text-decoration: none;
+  margin-right: auto;
+}
+
+.nav-links {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-link {
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 14px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.nav-link:hover {
+  color: white;
+  background: #334155;
+}
+
+/* ── 知识库/试卷积累页面通用 ── */
+.page-content {
+  max-width: 860px;
+  margin: 28px auto;
+  padding: 0 16px 60px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.page-desc {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: #1e293b;
+}
+
+.upload-zone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 14px;
+  margin: 12px 0;
+  transition: border-color 0.2s;
+}
+
+.upload-zone:hover {
+  border-color: #1a56db;
+  color: #1a56db;
+}
+
+.status-msg {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.status-msg.uploading, .status-msg.processing, .status-msg.analyzing {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-msg.done {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.status-msg.error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* 知识点卡片 */
+.knowledge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.knowledge-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.kc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.kc-topic {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.kc-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.kc-keywords {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.kc-tag {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+.kc-content {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.kc-source {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 6px;
+}
+
+/* 试卷卡片 */
+.exam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.exam-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.exam-card:hover {
+  border-color: #1a56db;
+}
+
+.exam-card.active {
+  border-color: #1a56db;
+  background: #f8faff;
+}
+
+.ec-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.ec-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ec-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.ec-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.exam-analysis {
+  margin-top: 14px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 14px;
+}
+
+.analysis-section {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.analysis-section strong {
+  display: block;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.analysis-section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.dist-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.dist-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.dist-label {
+  min-width: 80px;
+  color: #374151;
+}
+
+.dist-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dist-bar-fill {
+  height: 100%;
+  background: #1a56db;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.dist-pct {
+  min-width: 36px;
+  text-align: right;
+  color: #64748b;
+}
+
 /* ── 操作区（输入表单、工具栏） ── */
 .toolbar {
   background: #1a56db;
@@ -298,15 +577,16 @@ textarea::placeholder {
   font-size: 10.5pt;
 }
 
-.hint-box {
+.socrates-hint {
   margin-left: 26px;
   font-size: 9pt;
-  color: #6b7280;
-  background: #fef9c3;
-  border-left: 3px solid #fbbf24;
-  padding: 2px 8px;
-  margin-top: 3px;
+  color: #4c1d95;
+  background: #ede9fe;
+  border-left: 3px solid #7c3aed;
+  padding: 3px 8px;
+  margin-top: 4px;
   margin-bottom: 4px;
+  font-style: italic;
 }
 
 .item-line {

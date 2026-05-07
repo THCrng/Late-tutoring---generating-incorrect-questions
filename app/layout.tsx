@@ -8,12 +8,20 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <nav className="main-nav no-print">
+          <a href="/" className="nav-brand">晚辅助手</a>
+          <div className="nav-links">
+            <a href="/" className="nav-link">生成练习题</a>
+            <a href="/knowledge" className="nav-link">知识库</a>
+            <a href="/exams" className="nav-link">试卷积累</a>
+          </div>
+        </nav>
+        <main>{children}</main>
+      </body>
     </html>
   );
 }
