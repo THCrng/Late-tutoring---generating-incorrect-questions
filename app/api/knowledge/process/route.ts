@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
     let pdfText = "";
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require("pdf-parse");
-      const fn = typeof mod === "function" ? mod : (mod.default ?? mod);
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+      const fn = typeof pdfParse === "function" ? pdfParse : pdfParse.default;
       const parsed = await fn(buffer);
       pdfText = parsed.text ?? "";
     } catch (pdfErr) {

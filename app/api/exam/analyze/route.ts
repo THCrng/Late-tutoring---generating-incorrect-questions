@@ -32,9 +32,10 @@ const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分�
 }`;
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
+  // Require the implementation file directly — avoids webpack export wrapping issues
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require("pdf-parse");
-  const fn = typeof mod === "function" ? mod : (mod.default ?? mod);
+  const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+  const fn = typeof pdfParse === "function" ? pdfParse : pdfParse.default;
   const parsed = await fn(buffer);
   return parsed.text ?? "";
 }
