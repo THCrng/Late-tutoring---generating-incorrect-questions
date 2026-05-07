@@ -5,16 +5,17 @@ import WorksheetPreview, {
   WorksheetData,
 } from "../components/WorksheetPreview";
 
-const GRADES = [
-  "一年级",
-  "二年级",
-  "三年级",
-  "四年级",
-  "五年级",
-  "六年级",
-];
-
+const GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级"];
 const TEXTBOOKS = ["人教版（PEP）"];
+
+const DIFFICULTY_OPTIONS = [
+  { value: "0.90", label: "0.90 — 很容易（基础巩固）" },
+  { value: "0.85", label: "0.85 — 较易" },
+  { value: "0.80", label: "0.80 — 中等（推荐）" },
+  { value: "0.75", label: "0.75 — 中等偏难" },
+  { value: "0.70", label: "0.70 — 较难" },
+  { value: "0.65", label: "0.65 — 困难（能力拔高）" },
+];
 
 type State = "idle" | "loading" | "preview" | "error";
 
@@ -22,11 +23,11 @@ export default function Home() {
   const [gaps, setGaps] = useState("");
   const [grade, setGrade] = useState("三年级");
   const [textbook, setTextbook] = useState("人教版（PEP）");
+  const [difficulty, setDifficulty] = useState("0.80");
   const [uiState, setUiState] = useState<State>("idle");
-  const [worksheetData, setWorksheetData] = useState<WorksheetData | null>(
-    null
-  );
+  const [worksheetData, setWorksheetData] = useState<WorksheetData | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   async function handleGenerate() {
     if (!gaps.trim()) return;
@@ -37,7 +38,7 @@ export default function Home() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gaps, grade, textbook }),
+        body: JSON.stringify({ gaps, grade, textbook, difficulty }),
       });
 
       let json: unknown;
@@ -60,13 +61,36 @@ export default function Home() {
     }
   }
 
+  async function handleExportPDF() {
+    setExporting(true);
+    try {
+      const { default: html2pdf } = await import("html2pdf.js");
+      const element = document.querySelector(".worksheet-wrap");
+      if (!element) return;
+      const filename = `练习题_${worksheetData?.grade}_${worksheetData?.date}.pdf`;
+      await html2pdf()
+        .set({
+          margin: 0,
+          filename,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"] },
+        })
+        .from(element)
+        .save();
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (uiState === "loading") {
     return (
       <div className="loading-wrap no-print">
         <div className="spinner" />
         <p>AI 正在根据人教版教材生成练习题…</p>
         <p style={{ fontSize: 13, color: "#888", marginTop: 6 }}>
-          通常需要 10–20 秒
+          通常需要 15–30 秒
         </p>
       </div>
     );
@@ -95,12 +119,18 @@ export default function Home() {
           <button className="btn-print" onClick={() => window.print()}>
             打印（2页A4）
           </button>
+          <button
+            className="btn-pdf"
+            onClick={handleExportPDF}
+            disabled={exporting}
+          >
+            {exporting ? "生成中…" : "导出 PDF"}
+          </button>
           <button className="btn-reset" onClick={() => setUiState("idle")}>
             ← 重新生成
           </button>
           <span style={{ fontSize: 13, color: "#666" }}>
-            {worksheetData.grade} · {worksheetData.textbook} ·{" "}
-            {worksheetData.date}
+            {worksheetData.grade} · {worksheetData.textbook} · 难度{difficulty} · {worksheetData.date}
           </span>
         </div>
         <WorksheetPreview data={worksheetData} />
@@ -120,25 +150,30 @@ export default function Home() {
           年级
           <select value={grade} onChange={(e) => setGrade(e.target.value)}>
             {GRADES.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
+              <option key={g} value={g}>{g}</option>
             ))}
           </select>
         </label>
         <label>
           教材版本
-          <select
-            value={textbook}
-            onChange={(e) => setTextbook(e.target.value)}
-          >
+          <select value={textbook} onChange={(e) => setTextbook(e.target.value)}>
             {TEXTBOOKS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
+              <option key={t} value={t}>{t}</option>
             ))}
           </select>
         </label>
+        <label>
+          试卷难度系数
+          <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+            {DIFFICULTY_OPTIONS.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="difficulty-hint">
+        难度系数 = 预期平均分 ÷ 满分。系数越小题目越难，0.80 表示预期得分约 80%。
       </div>
 
       <textarea
@@ -155,15 +190,8 @@ export default function Home() {
         生成练习题（2页A4）
       </button>
 
-      <p
-        style={{
-          marginTop: 16,
-          fontSize: 12,
-          color: "#888",
-          textAlign: "center",
-        }}
-      >
-        AI 将根据人教版教材知识点自动出题，生成后可直接打印
+      <p style={{ marginTop: 16, fontSize: 12, color: "#888", textAlign: "center" }}>
+        AI 将根据人教版教材知识点自动出题，生成后可直接打印或导出 PDF
       </p>
     </div>
   );
