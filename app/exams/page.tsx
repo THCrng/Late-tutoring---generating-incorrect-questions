@@ -292,12 +292,16 @@ function StatusBadge({ status, error }: { status: ItemStatus; error?: string }) 
 }
 
 // ── 主页面 ───────────────────────────────────────────────────────────────────
+// Default fallback values when filename parsing yields nothing
+const PARSE_DEFAULTS: FileMeta = {
+  subject: "数学",
+  grade: "三年级",
+  examType: "期中",
+  year: CURRENT_YEAR,
+  term: "上学期",
+};
+
 export default function ExamsPage() {
-  const [subject, setSubject] = useState("数学");
-  const [grade, setGrade] = useState("三年级");
-  const [examType, setExamType] = useState("期中");
-  const [year, setYear] = useState(CURRENT_YEAR);
-  const [term, setTerm] = useState("上学期");
   const [isDragging, setIsDragging] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -367,7 +371,7 @@ export default function ExamsPage() {
   function addFiles(files: FileList | File[]) {
     const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
     if (pdfs.length === 0) return;
-    const defaults: FileMeta = { subject, grade, examType, year, term };
+    const defaults = PARSE_DEFAULTS;
     const items: QueueItem[] = pdfs.map(f => ({
       id: `${Date.now()}-${Math.random()}`,
       file: f,
@@ -489,14 +493,9 @@ export default function ExamsPage() {
       {/* Upload card */}
       <div className="card">
         <h3 className="card-title">批量上传试卷</h3>
-
-        <div className="selector-row">
-          <label>科目<select value={subject} onChange={e => setSubject(e.target.value)}>{SUBJECTS.map(s => <option key={s}>{s}</option>)}</select></label>
-          <label>年级<select value={grade} onChange={e => setGrade(e.target.value)}>{GRADES.map(g => <option key={g}>{g}</option>)}</select></label>
-          <label>类型<select value={examType} onChange={e => setExamType(e.target.value)}>{EXAM_TYPES.map(t => <option key={t}>{t}</option>)}</select></label>
-          <label>学年<select value={year} onChange={e => setYear(Number(e.target.value))}>{YEARS.map(y => <option key={y} value={y}>{y}年</option>)}</select></label>
-          <label>学期<select value={term} onChange={e => setTerm(e.target.value)}>{TERMS.map(t => <option key={t}>{t}</option>)}</select></label>
-        </div>
+        <p style={{ fontSize: 13, color: "#666", marginBottom: 10 }}>
+          系统自动从文件名识别年份、年级、学期、科目、考试类型，识别后可逐条修改。
+        </p>
 
         <div
           className={`upload-zone ${isDragging ? "dragging" : ""}`}
