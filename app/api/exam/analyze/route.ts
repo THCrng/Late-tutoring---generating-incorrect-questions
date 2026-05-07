@@ -102,12 +102,14 @@ async function renderPdfToImages(buffer: Buffer, maxPages = 6): Promise<string[]
 
   for (let i = 0; i < pageCount; i++) {
     const page = doc.loadPage(i);
-    // Scale 0.8x — readable for Claude vision, keeps payload small
+    // Use low scale + quality to keep scanned image PDFs small
+    // Scanned PDFs can be 300+ DPI; 0.3x gives ~90 DPI equivalent — enough for Gemini OCR
     const pixmap = page.toPixmap(
-      [0.8, 0, 0, 0.8, 0, 0],
+      [0.3, 0, 0, 0.3, 0, 0],
       ColorSpace.DeviceRGB
     );
-    const jpeg = pixmap.asJPEG(65);
+    const jpeg = pixmap.asJPEG(50);
+    console.log(`Page ${i + 1} JPEG size: ${jpeg.length} bytes (${Math.round(jpeg.length / 1024)}KB)`);
     images.push(Buffer.from(jpeg).toString("base64"));
   }
   return images;
