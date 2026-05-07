@@ -628,22 +628,23 @@ textarea::placeholder {
 
 .a4-page {
   width: 210mm;
-  min-height: 297mm;
+  height: 297mm;
+  overflow: hidden;
   padding: 14mm 18mm;
   margin: 24px auto;
   background: white;
   box-shadow: 0 3px 16px rgba(0, 0, 0, 0.15);
   font-family: 'STSong', 'SimSun', 'Noto Serif CJK SC', 'Source Han Serif CN', serif;
-  font-size: 11.5pt;
-  line-height: 1.9;
+  font-size: 11pt;
+  line-height: 1.6;
   color: #111;
 }
 
 /* 页眉 */
 .page-header {
   border-bottom: 2px solid #111;
-  padding-bottom: 6px;
-  margin-bottom: 14px;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -663,7 +664,7 @@ textarea::placeholder {
 
 /* 每个知识点区块 */
 .section-block {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 
 .section-title {
@@ -678,13 +679,13 @@ textarea::placeholder {
 .section-goal {
   font-size: 9.5pt;
   color: #555;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
   font-style: italic;
 }
 
 /* 单道题 */
 .exercise-block {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   page-break-inside: avoid;
 }
 
@@ -801,7 +802,9 @@ textarea::placeholder {
 
   .a4-page {
     width: 100%;
+    height: auto;
     min-height: 0;
+    overflow: visible;
     padding: 0;
     margin: 0;
     box-shadow: none;
@@ -814,9 +817,19 @@ textarea::placeholder {
     break-after: avoid;
   }
 
+  .section-block {
+    break-inside: avoid;
+    margin-bottom: 8px;
+  }
+
   .exercise-block {
     page-break-inside: avoid;
     break-inside: avoid;
+    margin-bottom: 4px;
+  }
+
+  .section-goal {
+    margin-bottom: 3px;
   }
 
   .section-title {
