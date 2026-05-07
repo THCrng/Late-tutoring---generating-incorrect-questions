@@ -10,6 +10,15 @@ const TERMS = ["上学期", "下学期"];
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
 
+interface ExamQuestion {
+  number: string;
+  type: string;
+  score: number;
+  content: string;
+  specificItems: string[];
+  knowledgePoints: string[];
+}
+
 interface ExamRecord {
   id: string;
   school: string;
@@ -21,14 +30,19 @@ interface ExamRecord {
   file_url: string;
   file_name: string;
   analysis: {
-    knowledgeDistribution: Array<{ topic: string; frequency: number; percentage: number }>;
+    questions: ExamQuestion[];
+    knowledgeDistribution: Array<{
+      topic: string;
+      percentage: number;
+      specificContent: string;
+      sourceQuestions: string[];
+    }>;
     questionTypes: Array<{ type: string; count: number; percentage: number }>;
     difficultyProfile: { basic: number; medium: number; hard: number; coefficient: number };
     schoolStyle: string;
     keyFocusAreas: string[];
-    typicalFormats: string[];
     weaknessPatterns: string[];
-    suggestions: string;
+    suggestions: string[];
   };
   created_at: string;
 }
@@ -151,16 +165,52 @@ function ExamReportView({ exams, onClose }: { exams: ExamRecord[]; onClose: () =
                   </div>
                   {exam.analysis && (
                     <>
+                      {/* 题目清单 */}
+                      {exam.analysis.questions?.length > 0 && (
+                        <div className="report-section">
+                          <div className="report-section-title">题目清单</div>
+                          {exam.analysis.questions.map((q, i) => (
+                            <div key={i} className="report-question-block">
+                              <div className="report-question-header">
+                                <span className="rq-number">{q.number}</span>
+                                <span className="rq-type">{q.type}</span>
+                                {q.score > 0 && <span className="rq-score">{q.score}分</span>}
+                              </div>
+                              {q.specificItems?.length > 0 && (
+                                <div className="rq-items">
+                                  {q.specificItems.map((item, j) => <span key={j} className="rq-item">{item}</span>)}
+                                </div>
+                              )}
+                              {q.knowledgePoints?.length > 0 && (
+                                <div className="rq-kp">
+                                  考查：{q.knowledgePoints.join("；")}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 考点分布（含具体内容） */}
                       <div className="report-section">
                         <div className="report-section-title">考点分布</div>
                         {exam.analysis.knowledgeDistribution?.slice(0, 8).map(kd => (
-                          <div key={kd.topic} className="dist-bar-row" style={{ marginBottom: 4 }}>
-                            <span className="dist-label">{kd.topic}</span>
-                            <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
-                            <span className="dist-pct">{kd.percentage}%</span>
+                          <div key={kd.topic} style={{ marginBottom: 8 }}>
+                            <div className="dist-bar-row">
+                              <span className="dist-label">{kd.topic}</span>
+                              <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
+                              <span className="dist-pct">{kd.percentage}%</span>
+                            </div>
+                            {kd.specificContent && (
+                              <div style={{ fontSize: 11, color: "#555", marginTop: 2, paddingLeft: 4 }}>
+                                {kd.specificContent}
+                                {kd.sourceQuestions?.length > 0 && <span style={{ color: "#9ca3af" }}> 【{kd.sourceQuestions.join("、")}】</span>}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
+
                       <div className="report-grid">
                         <div className="report-section">
                           <div className="report-section-title">题型分布</div>
@@ -178,28 +228,39 @@ function ExamReportView({ exams, onClose }: { exams: ExamRecord[]; onClose: () =
                           </div>
                         </div>
                       </div>
+
                       <div className="report-section">
-                        <div className="report-section-title">高频考点</div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {exam.analysis.keyFocusAreas?.map(k => <span key={k} className="kc-tag">{k}</span>)}
-                        </div>
+                        <div className="report-section-title">高频考点（含规律）</div>
+                        <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.8 }}>
+                          {exam.analysis.keyFocusAreas?.map((k, i) => <li key={i}>{k}</li>)}
+                        </ul>
                       </div>
+
                       <div className="report-section">
                         <div className="report-section-title">出题风格</div>
                         <p style={{ fontSize: 12, lineHeight: 1.7 }}>{exam.analysis.schoolStyle}</p>
                       </div>
+
                       {exam.analysis.weaknessPatterns?.length > 0 && (
                         <div className="report-section">
                           <div className="report-section-title">学生易失分点</div>
-                          <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.7 }}>
+                          <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.8 }}>
                             {exam.analysis.weaknessPatterns.map((w, i) => <li key={i}>{w}</li>)}
                           </ul>
                         </div>
                       )}
-                      <div className="report-section">
-                        <div className="report-section-title">备考建议</div>
-                        <p style={{ fontSize: 12, lineHeight: 1.7 }}>{exam.analysis.suggestions}</p>
-                      </div>
+
+                      {exam.analysis.suggestions?.length > 0 && (
+                        <div className="report-section">
+                          <div className="report-section-title">备考建议</div>
+                          <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.8 }}>
+                            {(Array.isArray(exam.analysis.suggestions)
+                              ? exam.analysis.suggestions
+                              : [exam.analysis.suggestions]
+                            ).map((s, i) => <li key={i}>{s}</li>)}
+                          </ul>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -582,18 +643,52 @@ export default function ExamsPage() {
 
                     {selectedExam?.id === exam.id && exam.analysis && (
                       <div className="exam-analysis">
+                        {/* 题目清单 */}
+                        {exam.analysis.questions?.length > 0 && (
+                          <div className="analysis-section">
+                            <strong>题目清单</strong>
+                            {exam.analysis.questions.map((q, i) => (
+                              <div key={i} className="card-question-block">
+                                <div className="cq-header">
+                                  <span className="cq-num">{q.number}</span>
+                                  <span className="cq-type">{q.type}</span>
+                                  {q.score > 0 && <span className="cq-score">{q.score}分</span>}
+                                </div>
+                                {q.specificItems?.length > 0 && (
+                                  <div className="cq-items">
+                                    {q.specificItems.map((item, j) => <span key={j} className="cq-item">{item}</span>)}
+                                  </div>
+                                )}
+                                {q.knowledgePoints?.length > 0 && (
+                                  <div className="cq-kp">考查：{q.knowledgePoints.join("；")}</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 考点分布（含具体内容） */}
                         <div className="analysis-section">
                           <strong>考点分布</strong>
                           <div className="dist-bars">
                             {exam.analysis.knowledgeDistribution?.slice(0, 6).map(kd => (
-                              <div key={kd.topic} className="dist-bar-row">
-                                <span className="dist-label">{kd.topic}</span>
-                                <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
-                                <span className="dist-pct">{kd.percentage}%</span>
+                              <div key={kd.topic} style={{ marginBottom: 6 }}>
+                                <div className="dist-bar-row">
+                                  <span className="dist-label">{kd.topic}</span>
+                                  <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
+                                  <span className="dist-pct">{kd.percentage}%</span>
+                                </div>
+                                {kd.specificContent && (
+                                  <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>
+                                    {kd.specificContent}
+                                    {kd.sourceQuestions?.length > 0 && <span style={{ color: "#9ca3af" }}> 【{kd.sourceQuestions.join("、")}】</span>}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
                         </div>
+
                         <div className="analysis-section">
                           <strong>题型分布</strong>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
@@ -601,7 +696,7 @@ export default function ExamsPage() {
                           </div>
                         </div>
                         <div className="analysis-section">
-                          <strong>难度分布</strong>
+                          <strong>难度</strong>
                           <p>基础 {exam.analysis.difficultyProfile?.basic}% / 中等 {exam.analysis.difficultyProfile?.medium}% / 难 {exam.analysis.difficultyProfile?.hard}%（系数约 {exam.analysis.difficultyProfile?.coefficient}）</p>
                         </div>
                         <div className="analysis-section">
@@ -614,10 +709,17 @@ export default function ExamsPage() {
                             <ul>{exam.analysis.weaknessPatterns.map((w, i) => <li key={i}>{w}</li>)}</ul>
                           </div>
                         )}
-                        <div className="analysis-section">
-                          <strong>备考建议</strong>
-                          <p>{exam.analysis.suggestions}</p>
-                        </div>
+                        {exam.analysis.suggestions?.length > 0 && (
+                          <div className="analysis-section">
+                            <strong>备考建议</strong>
+                            <ul>
+                              {(Array.isArray(exam.analysis.suggestions)
+                                ? exam.analysis.suggestions
+                                : [exam.analysis.suggestions]
+                              ).map((s, i) => <li key={i}>{s}</li>)}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
