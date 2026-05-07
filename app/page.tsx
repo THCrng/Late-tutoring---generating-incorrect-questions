@@ -40,17 +40,18 @@ export default function Home() {
         body: JSON.stringify({ gaps, grade, textbook }),
       });
 
-      let json: { error?: string } & Record<string, unknown>;
+      let json: unknown;
       try {
         json = await res.json();
       } catch {
         throw new Error(`服务器响应异常 (HTTP ${res.status})，请查看终端日志`);
       }
 
-      if (!res.ok || json.error) {
-        throw new Error(json.error || "未知错误");
+      const data = json as { error?: string } & Record<string, unknown>;
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "未知错误");
       }
-      setWorksheetData(json as WorksheetData);
+      setWorksheetData(data as unknown as WorksheetData);
       setUiState("preview");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "生成失败，请重试";
