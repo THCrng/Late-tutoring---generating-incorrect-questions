@@ -219,14 +219,14 @@ export async function POST(req: NextRequest) {
         // Vision mode: render PDF pages server-side (or use client-provided images)
         const imgs: string[] = pageImages?.length > 0
           ? pageImages
-          : await renderPdfToImages(buffer, 3);
+          : await renderPdfToImages(buffer, 1);
 
         if (imgs.length === 0) {
           return NextResponse.json({ error: "无法渲染PDF页面，文件可能已损坏" }, { status: 400 });
         }
         console.log(`Vision mode: analyzing ${imgs.length} page images`);
         const content: object[] = [
-          { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片，请直接从图片中识别并分析）" },
+          { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片首页，请直接从图片中识别题目内容进行分析。若首页信息不完整，请根据可见内容合理推断整体结构）" },
           ...imgs.map((img: string) => ({
             type: "image_url",
             image_url: { url: `data:image/jpeg;base64,${img}` },
