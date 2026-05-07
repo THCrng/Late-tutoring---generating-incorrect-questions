@@ -102,12 +102,12 @@ async function renderPdfToImages(buffer: Buffer, maxPages = 6): Promise<string[]
 
   for (let i = 0; i < pageCount; i++) {
     const page = doc.loadPage(i);
-    // Scale 1.5x — good balance of readability vs file size
+    // Scale 0.8x — readable for Claude vision, keeps payload small
     const pixmap = page.toPixmap(
-      [1.5, 0, 0, 1.5, 0, 0],
+      [0.8, 0, 0, 0.8, 0, 0],
       ColorSpace.DeviceRGB
     );
-    const jpeg = pixmap.asJPEG(80);
+    const jpeg = pixmap.asJPEG(65);
     images.push(Buffer.from(jpeg).toString("base64"));
   }
   return images;
@@ -158,7 +158,7 @@ async function callClaude(messages: object[]): Promise<string> {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2048,
+        max_tokens: 1500,
         stream: false,
         messages,
       }),
@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
         // Vision mode: render PDF pages server-side (or use client-provided images)
         const imgs: string[] = pageImages?.length > 0
           ? pageImages
-          : await renderPdfToImages(buffer, 6);
+          : await renderPdfToImages(buffer, 3);
 
         if (imgs.length === 0) {
           return NextResponse.json({ error: "无法渲染PDF页面，文件可能已损坏" }, { status: 400 });
