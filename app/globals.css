@@ -297,6 +297,143 @@ body {
   color: #64748b;
 }
 
+/* ── 试卷列表筛选 + 多选工具栏 ── */
+.exam-filter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exam-filter-row select {
+  padding: 5px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+}
+
+.exam-select-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-export-report {
+  padding: 7px 18px;
+  background: #1a56db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-export-report:hover {
+  background: #1245b5;
+}
+
+.exam-card.selected {
+  border-color: #1a56db;
+  background: #f0f5ff;
+}
+
+/* ── 报告全屏覆盖 ── */
+.report-overlay {
+  position: fixed;
+  inset: 0;
+  background: #f0f0f0;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.report-toolbar {
+  position: sticky;
+  top: 0;
+  background: #1e293b;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.report-body {
+  padding: 24px 0 60px;
+}
+
+.report-cover {
+  text-align: center;
+  padding: 60px 40px !important;
+}
+
+.report-exam-page {
+  padding: 14mm 18mm !important;
+}
+
+.report-exam-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid #111;
+  padding-bottom: 8px;
+}
+
+.report-exam-header h2 {
+  font-size: 14pt;
+  font-weight: 900;
+  margin: 0;
+}
+
+.report-badge {
+  background: #1a56db;
+  color: white;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 10pt;
+  font-weight: 600;
+}
+
+.report-section {
+  margin-bottom: 14px;
+}
+
+.report-section-title {
+  font-size: 10.5pt;
+  font-weight: 700;
+  color: #1e293b;
+  border-left: 3px solid #1a56db;
+  padding-left: 8px;
+  margin-bottom: 6px;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+@media print {
+  .report-overlay {
+    position: static;
+    background: white;
+  }
+  .report-toolbar { display: none !important; }
+  .report-body { padding: 0; }
+  .report-grid { break-inside: avoid; }
+  .report-section { break-inside: avoid; }
+}
+
 /* ── 操作区（输入表单、工具栏） ── */
 .toolbar {
   background: #1a56db;
