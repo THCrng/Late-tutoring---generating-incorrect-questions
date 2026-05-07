@@ -152,7 +152,7 @@ async function callGeminiVision(systemPrompt: string, images: string[]): Promise
     { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片，请直接从图片中识别题目内容进行分析）" },
     ...images.map(img => ({
       type: "image_url",
-      image_url: { url: `data:image/png;base64,${img}` },
+      image_url: { url: `data:image/jpeg;base64,${img}` },
     })),
   ];
 
