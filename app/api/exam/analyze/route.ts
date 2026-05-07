@@ -260,7 +260,7 @@ export async function POST(req: NextRequest) {
         // Vision mode: render PDF pages server-side (or use client-provided images)
         const imgs: string[] = pageImages?.length > 0
           ? pageImages
-          : await renderPdfToImages(buffer, 3);
+          : await renderPdfToImages(buffer, 8);
 
         if (imgs.length === 0) {
           return NextResponse.json({ error: "无法渲染PDF页面，文件可能已损坏" }, { status: 400 });
