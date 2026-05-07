@@ -90,44 +90,25 @@ sourceQuestions必须填写来源题号（如第一题、第三题第2小题）�
 3. 所有数值字段必须是数字
 4. suggestions必须是数组，每条一个字符串，不是一段长文`;
 
-// Render PDF pages to JPEG images using pdfjs-dist + @napi-rs/canvas (server-side)
+// Render PDF pages to JPEG images using mupdf (no Worker needed, pure WASM)
 async function renderPdfToImages(buffer: Buffer, maxPages = 6): Promise<string[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { createCanvas } = require("@napi-rs/canvas") as any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  // Point to the actual worker file so pdfjs can run it in a worker thread
-  const workerPath = require("path").resolve(
-    process.cwd(),
-    "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"
-  );
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${workerPath}`;
+  const mupdf: any = await import("mupdf");
+  const { Document, ColorSpace } = mupdf;
 
-  const canvasFactory = {
-    create(width: number, height: number) {
-      const canvas = createCanvas(width, height);
-      return { canvas, context: canvas.getContext("2d") };
-    },
-    reset(obj: { canvas: any }, width: number, height: number) {
-      obj.canvas.width = width;
-      obj.canvas.height = height;
-    },
-    destroy(_obj: unknown) {},
-  };
-
-  const data = new Uint8Array(buffer);
-  const pdf = await pdfjsLib.getDocument({
-    data, canvasFactory, useWorkerFetch: false, isEvalSupported: false,
-  }).promise;
-
+  const doc = Document.openDocument(buffer, "application/pdf");
+  const pageCount = Math.min(doc.countPages(), maxPages);
   const images: string[] = [];
-  for (let i = 1; i <= Math.min((pdf.numPages as number), maxPages); i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 1.5 });
-    const { canvas, context } = canvasFactory.create(viewport.width, viewport.height);
-    await page.render({ canvasContext: context, viewport }).promise;
-    const jpegBuf: Buffer = canvas.toBuffer("image/jpeg");
-    images.push(jpegBuf.toString("base64"));
+
+  for (let i = 0; i < pageCount; i++) {
+    const page = doc.loadPage(i);
+    // Scale 1.5x — good balance of readability vs file size
+    const pixmap = page.toPixmap(
+      [1.5, 0, 0, 1.5, 0, 0],
+      ColorSpace.DeviceRGB
+    );
+    const jpeg = pixmap.asJPEG(80);
+    images.push(Buffer.from(jpeg).toString("base64"));
   }
   return images;
 }
