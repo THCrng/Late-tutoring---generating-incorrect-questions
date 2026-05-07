@@ -140,6 +140,47 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 }
 
+// Vision analysis using Gemini 2.5 Pro (supports image inputs, faster than Claude vision)
+async function callGeminiVision(systemPrompt: string, images: string[]): Promise<string> {
+  const apiKey = process.env.VISION_API_KEY!;
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://us.novaiapi.com";
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 150_000);
+
+  const content: object[] = [
+    { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片，请直接从图片中识别题目内容进行分析）" },
+    ...images.map(img => ({
+      type: "image_url",
+      image_url: { url: `data:image/png;base64,${img}` },
+    })),
+  ];
+
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "[次]gemini-2.5-pro",
+        max_tokens: 4096,
+        stream: false,
+        messages: [{ role: "user", content }],
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) throw new Error(`Vision API error ${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
 async function callClaude(messages: object[]): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY!;
   const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
@@ -219,20 +260,14 @@ export async function POST(req: NextRequest) {
         // Vision mode: render PDF pages server-side (or use client-provided images)
         const imgs: string[] = pageImages?.length > 0
           ? pageImages
-          : await renderPdfToImages(buffer, 1);
+          : await renderPdfToImages(buffer, 3);
 
         if (imgs.length === 0) {
           return NextResponse.json({ error: "无法渲染PDF页面，文件可能已损坏" }, { status: 400 });
         }
-        console.log(`Vision mode: analyzing ${imgs.length} page images`);
-        const content: object[] = [
-          { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片首页，请直接从图片中识别题目内容进行分析。若首页信息不完整，请根据可见内容合理推断整体结构）" },
-          ...imgs.map((img: string) => ({
-            type: "image_url",
-            image_url: { url: `data:image/jpeg;base64,${img}` },
-          })),
-        ];
-        responseText = await callClaude([{ role: "user", content }]);
+        console.log(`Vision mode (Gemini): analyzing ${imgs.length} page images`);
+        // Use Gemini 2.5 Pro for vision — supports image inputs reliably
+        responseText = await callGeminiVision(systemPrompt, imgs);
       } else {
         // Tell client to retry with vision mode
         return NextResponse.json({ error: "NEEDS_VISION" }, { status: 422 });
