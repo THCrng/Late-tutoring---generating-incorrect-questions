@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const SUBJECTS = ["数学", "语文", "英语"];
 const GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "初一", "初二", "初三"];
@@ -40,6 +40,7 @@ export default function ExamsPage() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [term, setTerm] = useState("上学期");
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [statusMsg, setStatusMsg] = useState("");
 
@@ -62,6 +63,30 @@ export default function ExamsPage() {
 
   useEffect(() => { fetchExams(); }, [filterSubject]);
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped?.name.toLowerCase().endsWith(".pdf")) {
+      setFile(dropped);
+      setUploadState("idle");
+      setStatusMsg("");
+    } else if (dropped) {
+      setStatusMsg("只支持PDF格式");
+      setUploadState("error");
+    }
+  }, []);
+
   async function handleUpload() {
     if (!file) return;
     setUploadState("uploading");
@@ -71,7 +96,6 @@ export default function ExamsPage() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("bucket", "exams");
-      fd.append("folder", `${subject}/${grade}/${examType}`);
 
       const uploadRes = await fetch("/api/upload", { method: "POST", body: fd });
       const uploadData = await uploadRes.json();
@@ -98,7 +122,7 @@ export default function ExamsPage() {
       if (!analyzeRes.ok) throw new Error(analyzeData.error);
 
       setUploadState("done");
-      setStatusMsg("分析完成！");
+      setStatusMsg(`✅ 分析完成！`);
       setFile(null);
       fetchExams();
     } catch (err) {
@@ -142,22 +166,34 @@ export default function ExamsPage() {
           </label>
         </div>
 
-        <div className="upload-zone" onClick={() => document.getElementById("efile")?.click()}>
+        <div
+          className={`upload-zone ${isDragging ? "dragging" : ""}`}
+          onClick={() => document.getElementById("efile")?.click()}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <input
             id="efile"
             type="file"
             accept=".pdf"
             style={{ display: "none" }}
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              setFile(e.target.files?.[0] || null);
+              setUploadState("idle");
+              setStatusMsg("");
+            }}
           />
-          {file ? (
-            <p>📄 {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)</p>
+          {isDragging ? (
+            <p style={{ color: "#1a56db", fontWeight: 600 }}>松开鼠标上传</p>
+          ) : file ? (
+            <p>📄 {file.name}<br /><span style={{ fontSize: 12, color: "#888" }}>{(file.size / 1024 / 1024).toFixed(1)} MB · 点击重新选择</span></p>
           ) : (
-            <p>点击选择试卷 PDF</p>
+            <p>📂 拖拽 PDF 到这里，或点击选择文件</p>
           )}
         </div>
 
-        {uploadState !== "idle" && (
+        {statusMsg && (
           <div className={`status-msg ${uploadState}`}>{statusMsg}</div>
         )}
 
@@ -201,17 +237,20 @@ export default function ExamsPage() {
                     <span key={k} className="kc-tag">{k}</span>
                   ))}
                 </div>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>
+                  {exam.file_name} · 点击查看分析报告
+                </div>
 
                 {selectedExam?.id === exam.id && exam.analysis && (
                   <div className="exam-analysis">
                     <div className="analysis-section">
                       <strong>考点分布</strong>
                       <div className="dist-bars">
-                        {exam.analysis.knowledgeDistribution?.slice(0, 5).map((kd) => (
+                        {exam.analysis.knowledgeDistribution?.slice(0, 6).map((kd) => (
                           <div key={kd.topic} className="dist-bar-row">
                             <span className="dist-label">{kd.topic}</span>
                             <div className="dist-bar-bg">
-                              <div className="dist-bar-fill" style={{ width: `${kd.percentage}%` }} />
+                              <div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} />
                             </div>
                             <span className="dist-pct">{kd.percentage}%</span>
                           </div>
@@ -220,8 +259,19 @@ export default function ExamsPage() {
                     </div>
 
                     <div className="analysis-section">
+                      <strong>题型分布</strong>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                        {exam.analysis.questionTypes?.map((qt) => (
+                          <span key={qt.type} className="kc-tag">
+                            {qt.type} {qt.percentage}%
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="analysis-section">
                       <strong>难度分布</strong>
-                      <p>基础 {exam.analysis.difficultyProfile?.basic}% / 中等 {exam.analysis.difficultyProfile?.medium}% / 难 {exam.analysis.difficultyProfile?.hard}%（难度系数约 {exam.analysis.difficultyProfile?.coefficient}）</p>
+                      <p>基础 {exam.analysis.difficultyProfile?.basic}% / 中等 {exam.analysis.difficultyProfile?.medium}% / 难 {exam.analysis.difficultyProfile?.hard}%（估算难度系数 {exam.analysis.difficultyProfile?.coefficient}）</p>
                     </div>
 
                     <div className="analysis-section">
@@ -229,10 +279,12 @@ export default function ExamsPage() {
                       <p>{exam.analysis.schoolStyle}</p>
                     </div>
 
-                    <div className="analysis-section">
-                      <strong>学生易失分点</strong>
-                      <ul>{exam.analysis.weaknessPatterns?.map((w) => <li key={w}>{w}</li>)}</ul>
-                    </div>
+                    {exam.analysis.weaknessPatterns?.length > 0 && (
+                      <div className="analysis-section">
+                        <strong>学生易失分点</strong>
+                        <ul>{exam.analysis.weaknessPatterns.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                      </div>
+                    )}
 
                     <div className="analysis-section">
                       <strong>备考建议</strong>
