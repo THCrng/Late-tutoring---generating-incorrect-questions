@@ -149,7 +149,10 @@ async function callClaude(messages: object[]): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { filePath, school, subject, grade, examType, year, term, fileName } = await req.json();
+    const {
+      filePath, school, subject, grade, examType, year, term, fileName,
+      pageImages, // base64 JPEG strings from browser rendering (for scanned PDFs)
+    } = await req.json();
 
     if (!filePath || !subject || !grade || !examType) {
       return NextResponse.json({ error: "参数不完整" }, { status: 400 });
@@ -181,20 +184,32 @@ export async function POST(req: NextRequest) {
     try {
       pdfText = await extractPdfText(buffer);
     } catch (e) {
-      console.warn("pdf-parse failed, falling back to vision:", e);
+      console.warn("pdfjs text extraction failed:", e);
     }
 
     if (!pdfText || pdfText.trim().length < 50) {
-      return NextResponse.json({
-        error: "无法提取PDF文字内容。请确认上传的是【可搜索的电子版PDF】，而非手机拍照或扫描的图片PDF。可以尝试用电脑直接打开PDF，若能选中文字则可以上传。",
-      }, { status: 400 });
+      // No text found — check if client sent page images (scanned PDF vision mode)
+      if (pageImages && Array.isArray(pageImages) && pageImages.length > 0) {
+        console.log(`Using vision mode with ${pageImages.length} page images`);
+        const content: object[] = [
+          { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片，请直接从图片中识别题目内容进行分析）" },
+          ...pageImages.slice(0, 6).map((img: string) => ({
+            type: "image_url",
+            image_url: { url: `data:image/jpeg;base64,${img}` },
+          })),
+        ];
+        responseText = await callClaude([{ role: "user", content }]);
+      } else {
+        // Tell client to render PDF pages and retry with images
+        return NextResponse.json({ error: "NEEDS_VISION" }, { status: 422 });
+      }
+    } else {
+      // Digital PDF: send extracted text
+      responseText = await callClaude([{
+        role: "user",
+        content: `${systemPrompt}\n\n试卷内容：\n${pdfText.slice(0, 8000)}`,
+      }]);
     }
-
-    // Digital PDF: send text to Claude
-    responseText = await callClaude([{
-      role: "user",
-      content: `${systemPrompt}\n\n试卷内容：\n${pdfText.slice(0, 8000)}`,
-    }]);
 
     // Strip markdown code fences if present
     const stripped = responseText

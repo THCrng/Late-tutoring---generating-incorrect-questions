@@ -273,6 +273,33 @@ function ExamReportView({ exams, onClose }: { exams: ExamRecord[]; onClose: () =
   );
 }
 
+// ── 浏览器端 PDF → 图片（用于扫描件视觉分析）────────────────────────────────
+async function renderPdfPages(file: File, maxPages = 6): Promise<string[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfjsLib: any = await import("pdfjs-dist");
+  // Use CDN worker to avoid bundling issues
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.mjs";
+
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument(buffer).promise;
+  const images: string[] = [];
+
+  for (let i = 1; i <= Math.min(pdf.numPages, maxPages); i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    // Extract base64 JPEG (strip data URL prefix)
+    images.push(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+  }
+  return images;
+}
+
 // ── 状态图标 ─────────────────────────────────────────────────────────────────
 function StatusBadge({ status, error }: { status: ItemStatus; error?: string }) {
   const map: Record<ItemStatus, { label: string; cls: string }> = {
@@ -446,18 +473,34 @@ export default function ExamsPage() {
       updateItem(item.id, { status: "analyzing" });
       try {
         const m = item.meta;
-        const res = await fetch("/api/exam/analyze", {
+        const baseBody = {
+          filePath,
+          school: "我的学校",
+          subject: m.subject, grade: m.grade,
+          examType: m.examType, year: m.year, term: m.term,
+          fileName: item.file.name,
+        };
+
+        let res = await fetch("/api/exam/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filePath,
-            school: "我的学校",
-            subject: m.subject, grade: m.grade,
-            examType: m.examType, year: m.year, term: m.term,
-            fileName: item.file.name,
-          }),
+          body: JSON.stringify(baseBody),
         });
-        const data = await res.json();
+        let data = await res.json();
+
+        // Scanned PDF: render pages as images and retry
+        if (res.status === 422 && data.error === "NEEDS_VISION") {
+          updateItem(item.id, { status: "analyzing", error: undefined });
+          const pageImages = await renderPdfPages(item.file);
+          if (pageImages.length === 0) throw new Error("无法渲染PDF页面，请确认文件未损坏");
+          res = await fetch("/api/exam/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...baseBody, pageImages }),
+          });
+          data = await res.json();
+        }
+
         if (!res.ok) throw new Error(data.error);
         updateItem(item.id, { status: "done" });
       } catch (err) {
