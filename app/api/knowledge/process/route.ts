@@ -44,30 +44,38 @@ export async function POST(req: NextRequest) {
 
     let pdfText = "";
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pdfParse = (await import("pdf-parse")) as any;
-      const parsed = await (pdfParse.default ?? pdfParse)(buffer);
-      pdfText = parsed.text;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse");
+      const parsed = await pdfParse(buffer);
+      pdfText = parsed.text ?? "";
     } catch (pdfErr) {
-      console.error("PDF parse error:", pdfErr);
-      return NextResponse.json({ error: "PDF解析失败，请确认文件格式正确" }, { status: 500 });
+      console.warn("pdf-parse failed, will use vision fallback:", pdfErr);
     }
 
-    if (!pdfText || pdfText.trim().length < 50) {
-      return NextResponse.json({ error: "PDF内容为空或无法识别（可能是扫描件图片）" }, { status: 400 });
-    }
-
-    // Limit text to avoid token overflow
-    const truncatedText = pdfText.slice(0, 8000);
-
-    const prompt = EXTRACT_PROMPT
+    const basePrompt = EXTRACT_PROMPT
       .replace("{{SUBJECT}}", subject)
       .replace("{{GRADE}}", grade)
       .replace("{{TEXTBOOK}}", textbook || "人教版（2026版）")
-      .replace("{{TEXT}}", truncatedText);
+      .replace("{{TEXT}}", "");
 
     const apiKey = process.env.ANTHROPIC_API_KEY!;
     const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+
+    // Build message: text mode for digital PDFs, vision mode for scanned PDFs
+    let messageContent: string | object[];
+    if (pdfText && pdfText.trim().length > 100) {
+      messageContent = EXTRACT_PROMPT
+        .replace("{{SUBJECT}}", subject)
+        .replace("{{GRADE}}", grade)
+        .replace("{{TEXTBOOK}}", textbook || "人教版（2026版）")
+        .replace("{{TEXT}}", pdfText.slice(0, 8000));
+    } else {
+      const base64 = buffer.toString("base64");
+      messageContent = [
+        { type: "text", text: basePrompt.replace("{{TEXT}}", "（见附件图片）") },
+        { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
+      ];
+    }
 
     const apiRes = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -79,7 +87,7 @@ export async function POST(req: NextRequest) {
         model: "claude-sonnet-4-6",
         max_tokens: 4096,
         stream: false,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: messageContent }],
       }),
     });
 

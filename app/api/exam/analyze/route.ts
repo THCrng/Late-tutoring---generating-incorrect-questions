@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分析以下学校考试试卷，挖掘该校的考试规律和出题偏好。
+const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分析这份学校考试试卷，挖掘该校的考试规律和出题偏好。
 
 试卷信息：
 - 学校：{{SCHOOL}}
@@ -9,9 +9,6 @@ const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分�
 - 年级：{{GRADE}}
 - 类型：{{EXAM_TYPE}}
 - 学期：{{YEAR}}{{TERM}}
-
-试卷内容：
-{{TEXT}}
 
 请进行深度分析，返回JSON格式（不要有任何额外文字或markdown标记）：
 {
@@ -34,6 +31,36 @@ const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分�
   "suggestions": "备考建议（针对该校考试风格）"
 }`;
 
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfParse = require("pdf-parse");
+  const parsed = await pdfParse(buffer);
+  return parsed.text ?? "";
+}
+
+async function callClaude(messages: object[]): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY!;
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+
+  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      stream: false,
+      messages,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { filePath, school, subject, grade, examType, year, term, fileName } = await req.json();
@@ -42,7 +69,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "参数不完整" }, { status: 400 });
     }
 
-    // Download PDF from Supabase Storage
     const { data: fileData, error: downloadError } = await supabase.storage
       .from("exams")
       .download(filePath);
@@ -54,58 +80,48 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await fileData.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    let pdfText = "";
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pdfParse = (await import("pdf-parse")) as any;
-      const parsed = await (pdfParse.default ?? pdfParse)(buffer);
-      pdfText = parsed.text;
-    } catch (pdfErr) {
-      console.error("PDF parse error:", pdfErr);
-      return NextResponse.json({ error: "PDF解析失败，请确认文件格式正确" }, { status: 500 });
-    }
-
-    if (!pdfText || pdfText.trim().length < 50) {
-      return NextResponse.json({ error: "PDF内容为空或无法识别（扫描件需转为可识别文字格式）" }, { status: 400 });
-    }
-
-    const truncatedText = pdfText.slice(0, 8000);
-
-    const prompt = ANALYZE_PROMPT
+    const systemPrompt = ANALYZE_PROMPT
       .replace("{{SCHOOL}}", school || "我的学校")
       .replace("{{SUBJECT}}", subject)
       .replace("{{GRADE}}", grade)
       .replace("{{EXAM_TYPE}}", examType)
       .replace("{{YEAR}}", String(year || new Date().getFullYear()))
-      .replace("{{TERM}}", term || "上学期")
-      .replace("{{TEXT}}", truncatedText);
+      .replace("{{TERM}}", term || "上学期");
 
-    const apiKey = process.env.ANTHROPIC_API_KEY!;
-    const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+    let responseText = "";
 
-    const apiRes = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        stream: false,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!apiRes.ok) {
-      return NextResponse.json({ error: `AI分析失败 (${apiRes.status})` }, { status: 500 });
+    // Try text extraction first (works for digital PDFs)
+    let pdfText = "";
+    try {
+      pdfText = await extractPdfText(buffer);
+    } catch (e) {
+      console.warn("pdf-parse failed, falling back to vision:", e);
     }
 
-    const apiData = await apiRes.json();
-    const text: string = apiData.choices?.[0]?.message?.content ?? "";
+    if (pdfText && pdfText.trim().length > 100) {
+      // Digital PDF: send as text
+      responseText = await callClaude([{
+        role: "user",
+        content: `${systemPrompt}\n\n试卷内容：\n${pdfText.slice(0, 8000)}`,
+      }]);
+    } else {
+      // Scanned PDF: send as base64 image to Claude vision
+      const base64 = buffer.toString("base64");
+      responseText = await callClaude([{
+        role: "user",
+        content: [
+          { type: "text", text: systemPrompt },
+          {
+            type: "image_url",
+            image_url: { url: `data:application/pdf;base64,${base64}` },
+          },
+        ],
+      }]);
+    }
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error("No JSON in response:", responseText.slice(0, 500));
       return NextResponse.json({ error: "AI返回格式异常，请重试" }, { status: 500 });
     }
 
@@ -116,7 +132,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "AI返回JSON解析失败，请重试" }, { status: 500 });
     }
 
-    // Store exam record in database
     const { data: examRecord, error: insertError } = await supabase
       .from("exams")
       .insert({
@@ -134,7 +149,6 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error("DB insert error:", insertError);
       return NextResponse.json({ error: "存储到数据库失败：" + insertError.message }, { status: 500 });
     }
 
