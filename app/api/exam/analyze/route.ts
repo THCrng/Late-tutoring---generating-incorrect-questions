@@ -158,7 +158,7 @@ async function callClaude(messages: object[]): Promise<string> {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1500,
+        max_tokens: 4096,
         stream: false,
         messages,
       }),
