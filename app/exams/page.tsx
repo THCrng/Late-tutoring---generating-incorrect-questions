@@ -290,6 +290,18 @@ export default function ExamsPage() {
     a.click();
   }
 
+  async function handleDelete(exam: ExamRecord) {
+    if (!confirm(`确定删除「${exam.grade} ${exam.subject} ${exam.exam_type}」的记录？此操作不可恢复。`)) return;
+    const res = await fetch(`/api/exams/${exam.id}`, { method: "DELETE" });
+    if (res.ok) {
+      setExams(prev => prev.filter(e => e.id !== exam.id));
+      if (selectedExam?.id === exam.id) setSelectedExam(null);
+    } else {
+      const data = await res.json();
+      alert("删除失败：" + (data.error || "未知错误"));
+    }
+  }
+
   // ── 添加文件到队列（自动解析文件名）──
   function addFiles(files: FileList | File[]) {
     const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
@@ -565,6 +577,7 @@ export default function ExamsPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
                       <span style={{ fontSize: 12, color: "#9ca3af" }}>点击展开分析报告</span>
                       <button className="btn-download-exam" onClick={e => { e.stopPropagation(); handleDownload(exam); }}>⬇ 下载原卷</button>
+                      <button className="btn-delete-exam" onClick={e => { e.stopPropagation(); handleDelete(exam); }}>删除</button>
                     </div>
 
                     {selectedExam?.id === exam.id && exam.analysis && (

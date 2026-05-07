@@ -361,6 +361,21 @@ body {
   background: #eff6ff;
 }
 
+.btn-delete-exam {
+  padding: 3px 10px;
+  background: white;
+  color: #dc2626;
+  border: 1px solid #dc2626;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-delete-exam:hover {
+  background: #fef2f2;
+}
+
 /* ── 批量队列 ── */
 .batch-queue {
   margin-top: 12px;
