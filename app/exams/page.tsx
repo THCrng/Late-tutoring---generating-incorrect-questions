@@ -232,17 +232,14 @@ export default function ExamsPage() {
     setSelectedIds(new Set());
   }
 
-  async function handleDownload(exam: ExamRecord) {
-    const { data, error } = await supabaseBrowser.storage
+  function handleDownload(exam: ExamRecord) {
+    const { data } = supabaseBrowser.storage
       .from("exams")
-      .createSignedUrl(exam.file_url, 120); // 2-minute link
-    if (error || !data) {
-      alert("生成下载链接失败：" + error?.message);
-      return;
-    }
+      .getPublicUrl(exam.file_url);
     const a = document.createElement("a");
-    a.href = data.signedUrl;
+    a.href = data.publicUrl;
     a.download = exam.file_name || exam.file_url;
+    a.target = "_blank";
     a.click();
   }
 
