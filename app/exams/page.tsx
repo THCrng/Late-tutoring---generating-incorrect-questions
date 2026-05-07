@@ -35,11 +35,66 @@ interface ExamRecord {
 
 type ItemStatus = "waiting" | "uploading" | "analyzing" | "done" | "error";
 
+interface FileMeta {
+  subject: string;
+  grade: string;
+  examType: string;
+  year: number;
+  term: string;
+}
+
 interface QueueItem {
   id: string;
   file: File;
   status: ItemStatus;
+  meta: FileMeta;
   error?: string;
+}
+
+// ── 文件名解析器 ──────────────────────────────────────────────────────────────
+function parseFilename(filename: string, defaults: FileMeta): FileMeta {
+  const name = filename.replace(/\.pdf$/i, "");
+
+  // 年份：优先取4位数字
+  const yearMatch = name.match(/20(\d{2})/);
+  const year = yearMatch ? parseInt("20" + yearMatch[1]) : defaults.year;
+
+  // 年级
+  const gradeMap: [RegExp, string][] = [
+    [/初三|九年级|9年级/, "初三"],
+    [/初二|八年级|8年级/, "初二"],
+    [/初一|七年级|7年级/, "初一"],
+    [/六年级|6年级/, "六年级"],
+    [/五年级|5年级/, "五年级"],
+    [/四年级|4年级/, "四年级"],
+    [/三年级|3年级/, "三年级"],
+    [/二年级|2年级/, "二年级"],
+    [/一年级|1年级/, "一年级"],
+  ];
+  let grade = defaults.grade;
+  for (const [re, val] of gradeMap) {
+    if (re.test(name)) { grade = val; break; }
+  }
+
+  // 考试类型
+  let examType = defaults.examType;
+  if (/期末/.test(name)) examType = "期末";
+  else if (/期中/.test(name)) examType = "期中";
+  else if (/月考/.test(name)) examType = "月考";
+  else if (/单元考|单元测|单元/.test(name)) examType = "月考";
+
+  // 学期/册次
+  let term = defaults.term;
+  if (/下学期|第二学期|下册|二学期/.test(name)) term = "下学期";
+  else if (/上学期|第一学期|上册|一学期/.test(name)) term = "上学期";
+
+  // 学科
+  let subject = defaults.subject;
+  if (/语文/.test(name)) subject = "语文";
+  else if (/数学/.test(name)) subject = "数学";
+  else if (/英语/.test(name)) subject = "英语";
+
+  return { year, grade, examType, term, subject };
 }
 
 // ── 导出报告渲染 ──────────────────────────────────────────────────────────────
@@ -235,14 +290,16 @@ export default function ExamsPage() {
     a.click();
   }
 
-  // ── 添加文件到队列 ──
+  // ── 添加文件到队列（自动解析文件名）──
   function addFiles(files: FileList | File[]) {
     const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
     if (pdfs.length === 0) return;
+    const defaults: FileMeta = { subject, grade, examType, year, term };
     const items: QueueItem[] = pdfs.map(f => ({
       id: `${Date.now()}-${Math.random()}`,
       file: f,
       status: "waiting",
+      meta: parseFilename(f.name, defaults),
     }));
     setQueue(prev => {
       const next = [...prev, ...items];
@@ -254,6 +311,16 @@ export default function ExamsPage() {
   function updateItem(id: string, patch: Partial<QueueItem>) {
     setQueue(prev => {
       const next = prev.map(item => item.id === id ? { ...item, ...patch } : item);
+      queueRef.current = next;
+      return next;
+    });
+  }
+
+  function updateItemMeta(id: string, metaPatch: Partial<FileMeta>) {
+    setQueue(prev => {
+      const next = prev.map(item =>
+        item.id === id ? { ...item, meta: { ...item.meta, ...metaPatch } } : item
+      );
       queueRef.current = next;
       return next;
     });
@@ -298,16 +365,18 @@ export default function ExamsPage() {
         continue;
       }
 
-      // Analyze
+      // Analyze — use per-file metadata
       updateItem(item.id, { status: "analyzing" });
       try {
+        const m = item.meta;
         const res = await fetch("/api/exam/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             filePath,
             school: "我的学校",
-            subject, grade, examType, year, term,
+            subject: m.subject, grade: m.grade,
+            examType: m.examType, year: m.year, term: m.term,
             fileName: item.file.name,
           }),
         });
@@ -384,17 +453,37 @@ export default function ExamsPage() {
               )}
             </div>
             <div className="batch-queue-list">
-              {queue.map(item => (
-                <div key={item.id} className="batch-queue-item">
-                  <span className="bq-name" title={item.file.name}>{item.file.name}</span>
-                  <span className="bq-size">{(item.file.size / 1024 / 1024).toFixed(1)} MB</span>
-                  <StatusBadge status={item.status} error={item.error} />
-                  {(item.status === "waiting" || item.status === "error") && !batchRunning && (
-                    <button className="bq-remove" onClick={() => removeItem(item.id)}>✕</button>
-                  )}
-                  {item.error && <span className="bq-error">{item.error}</span>}
-                </div>
-              ))}
+              {queue.map(item => {
+                const editable = (item.status === "waiting" || item.status === "error") && !batchRunning;
+                return (
+                  <div key={item.id} className="batch-queue-item">
+                    <div className="bq-row-top">
+                      <span className="bq-name" title={item.file.name}>{item.file.name}</span>
+                      <span className="bq-size">{(item.file.size / 1024 / 1024).toFixed(1)} MB</span>
+                      <StatusBadge status={item.status} error={item.error} />
+                      {editable && <button className="bq-remove" onClick={() => removeItem(item.id)}>✕</button>}
+                    </div>
+                    <div className="bq-meta-row">
+                      <select disabled={!editable} value={item.meta.subject} onChange={e => updateItemMeta(item.id, { subject: e.target.value })}>
+                        {SUBJECTS.map(s => <option key={s}>{s}</option>)}
+                      </select>
+                      <select disabled={!editable} value={item.meta.grade} onChange={e => updateItemMeta(item.id, { grade: e.target.value })}>
+                        {GRADES.map(g => <option key={g}>{g}</option>)}
+                      </select>
+                      <select disabled={!editable} value={item.meta.examType} onChange={e => updateItemMeta(item.id, { examType: e.target.value })}>
+                        {EXAM_TYPES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                      <select disabled={!editable} value={String(item.meta.year)} onChange={e => updateItemMeta(item.id, { year: Number(e.target.value) })}>
+                        {YEARS.map(y => <option key={y} value={y}>{y}年</option>)}
+                      </select>
+                      <select disabled={!editable} value={item.meta.term} onChange={e => updateItemMeta(item.id, { term: e.target.value })}>
+                        {TERMS.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    {item.error && <span className="bq-error">{item.error}</span>}
+                  </div>
+                );
+              })}
             </div>
             <button
               className="btn-generate"
