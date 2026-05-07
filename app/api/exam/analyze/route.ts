@@ -32,12 +32,12 @@ const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分�
 }`;
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  // Require the implementation file directly — avoids webpack export wrapping issues
+  // New pdf-parse v3 API: class-based, data must be Uint8Array
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require("pdf-parse/lib/pdf-parse.js");
-  const fn = typeof pdfParse === "function" ? pdfParse : pdfParse.default;
-  const parsed = await fn(buffer);
-  return parsed.text ?? "";
+  const { PDFParse } = require("pdf-parse");
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  const result = await parser.getText();
+  return result.text ?? "";
 }
 
 async function callClaude(messages: object[]): Promise<string> {

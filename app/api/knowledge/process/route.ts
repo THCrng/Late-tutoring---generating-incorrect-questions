@@ -45,10 +45,10 @@ export async function POST(req: NextRequest) {
     let pdfText = "";
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse/lib/pdf-parse.js");
-      const fn = typeof pdfParse === "function" ? pdfParse : pdfParse.default;
-      const parsed = await fn(buffer);
-      pdfText = parsed.text ?? "";
+      const { PDFParse } = require("pdf-parse");
+      const parser = new PDFParse({ data: new Uint8Array(buffer) });
+      const result = await parser.getText();
+      pdfText = result.text ?? "";
     } catch (pdfErr) {
       console.warn("pdf-parse failed:", pdfErr);
     }
