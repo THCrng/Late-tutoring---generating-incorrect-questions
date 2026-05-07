@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { jsonrepair } from "jsonrepair";
 
 const EXTRACT_PROMPT = `你是一位专业的中国小学/初中教材分析专家。请仔细阅读以下教材内容，提取其中的核心考点，建立知识库。
 
@@ -89,9 +90,11 @@ export async function POST(req: NextRequest) {
     const apiData = await apiRes.json();
     const text: string = apiData.choices?.[0]?.message?.content ?? "";
 
-    // Extract JSON array from response
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    // Strip markdown code fences and extract JSON array
+    const stripped = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const jsonMatch = stripped.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
+      console.error("No JSON array in response:", text.slice(0, 500));
       return NextResponse.json({ error: "AI返回格式异常，请重试" }, { status: 500 });
     }
 
@@ -102,7 +105,7 @@ export async function POST(req: NextRequest) {
       questionTypes: string[];
     }>;
     try {
-      knowledgePoints = JSON.parse(jsonMatch[0]);
+      knowledgePoints = JSON.parse(jsonrepair(jsonMatch[0]));
     } catch {
       return NextResponse.json({ error: "AI返回JSON解析失败，请重试" }, { status: 500 });
     }
