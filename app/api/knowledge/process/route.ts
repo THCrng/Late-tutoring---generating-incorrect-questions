@@ -45,13 +45,21 @@ export async function POST(req: NextRequest) {
 
     let pdfText = "";
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { PDFParse } = require("pdf-parse");
-      const parser = new PDFParse({ data: new Uint8Array(buffer) });
-      const result = await parser.getText();
-      pdfText = result.text ?? "";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      const data = new Uint8Array(buffer);
+      const pdf = await pdfjsLib.getDocument({ data, useWorkerFetch: false, isEvalSupported: false }).promise;
+      const pageTexts: string[] = [];
+      for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pageTexts.push(content.items.map((item: any) => item.str ?? "").join(" "));
+      }
+      pdfText = pageTexts.join("\n");
     } catch (pdfErr) {
-      console.warn("pdf-parse failed:", pdfErr);
+      console.warn("pdfjs-dist extraction failed:", pdfErr);
     }
 
     if (!pdfText || pdfText.trim().length < 50) {
@@ -69,19 +77,27 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.ANTHROPIC_API_KEY!;
     const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
 
-    const apiRes = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        stream: false,
-        messages: [{ role: "user", content: messageContent as string }],
-      }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 150_000);
+    let apiRes: Response;
+    try {
+      apiRes = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2048,
+          stream: false,
+          messages: [{ role: "user", content: messageContent as string }],
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (!apiRes.ok) {
       return NextResponse.json({ error: `AI分析失败 (${apiRes.status})` }, { status: 500 });

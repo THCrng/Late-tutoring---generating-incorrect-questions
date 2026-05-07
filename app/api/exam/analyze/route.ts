@@ -37,32 +37,57 @@ const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分�
 2. 所有字符串值内不得使用英文双引号（"），如需引用内容用（）括号代替
 3. 所有数值字段必须是数字，不能是字符串`;
 
+// Use pdfjs-dist directly for more robust text extraction
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  // New pdf-parse v3 API: class-based, data must be Uint8Array
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PDFParse } = require("pdf-parse");
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  const result = await parser.getText();
-  return result.text ?? "";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    // Disable worker in Node.js environment
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+    const data = new Uint8Array(buffer);
+    const pdf = await pdfjsLib.getDocument({ data, useWorkerFetch: false, isEvalSupported: false }).promise;
+    const pageTexts: string[] = [];
+    for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pageText = content.items.map((item: any) => item.str ?? "").join(" ");
+      pageTexts.push(pageText);
+    }
+    return pageTexts.join("\n");
+  } catch (err) {
+    console.warn("pdfjs-dist extraction failed:", err);
+    return "";
+  }
 }
 
 async function callClaude(messages: object[]): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY!;
   const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
 
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      stream: false,
-      messages,
-    }),
-  });
+  // 150-second timeout — exam PDFs can take 60-120s to analyze
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 150_000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        stream: false,
+        messages,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const data = await res.json();
