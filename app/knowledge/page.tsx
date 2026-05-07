@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const SUBJECTS = ["数学", "语文", "英语"];
 const GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "初一", "初二", "初三"];
@@ -24,9 +24,9 @@ export default function KnowledgePage() {
   const [grade, setGrade] = useState("三年级");
   const [textbook, setTextbook] = useState("人教版（2026版）");
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [statusMsg, setStatusMsg] = useState("");
-  const [extractedCount, setExtractedCount] = useState(0);
 
   const [points, setPoints] = useState<KnowledgePoint[]>([]);
   const [filterSubject, setFilterSubject] = useState("全部");
@@ -48,6 +48,30 @@ export default function KnowledgePage() {
 
   useEffect(() => { fetchPoints(); }, [filterSubject, filterGrade]);
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped?.name.toLowerCase().endsWith(".pdf")) {
+      setFile(dropped);
+      setUploadState("idle");
+      setStatusMsg("");
+    } else if (dropped) {
+      setStatusMsg("只支持PDF格式");
+      setUploadState("error");
+    }
+  }, []);
+
   async function handleUpload() {
     if (!file) return;
     setUploadState("uploading");
@@ -57,7 +81,7 @@ export default function KnowledgePage() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("bucket", "knowledge");
-      fd.append("folder", `${subject}/${grade}`);
+      // No folder param — upload route uses timestamp-only key to avoid Chinese path issues
 
       const uploadRes = await fetch("/api/upload", { method: "POST", body: fd });
       const uploadData = await uploadRes.json();
@@ -80,9 +104,8 @@ export default function KnowledgePage() {
       const processData = await processRes.json();
       if (!processRes.ok) throw new Error(processData.error);
 
-      setExtractedCount(processData.extracted);
       setUploadState("done");
-      setStatusMsg(`成功提取 ${processData.extracted} 个考点！`);
+      setStatusMsg(`✅ 成功提取 ${processData.extracted} 个考点！`);
       setFile(null);
       fetchPoints();
     } catch (err) {
@@ -94,7 +117,7 @@ export default function KnowledgePage() {
   return (
     <div className="page-content">
       <h2 className="page-title">知识库管理</h2>
-      <p className="page-desc">上传人教版/教科版课本或教辅资料（PDF），AI 自动提取考点建立知识库，用于优化练习题生成质量。</p>
+      <p className="page-desc">上传人教版/教科版课本或教辅资料（PDF），AI 自动提取考点建立知识库，用于优化练习题生成质量。仅支持可选中文字的电子版PDF。</p>
 
       <div className="card">
         <h3 className="card-title">上传教材/教辅资料</h3>
@@ -119,22 +142,34 @@ export default function KnowledgePage() {
           </label>
         </div>
 
-        <div className="upload-zone" onClick={() => document.getElementById("kfile")?.click()}>
+        <div
+          className={`upload-zone ${isDragging ? "dragging" : ""}`}
+          onClick={() => document.getElementById("kfile")?.click()}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <input
             id="kfile"
             type="file"
             accept=".pdf"
             style={{ display: "none" }}
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              setFile(e.target.files?.[0] || null);
+              setUploadState("idle");
+              setStatusMsg("");
+            }}
           />
-          {file ? (
-            <p>📄 {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)</p>
+          {isDragging ? (
+            <p style={{ color: "#1a56db", fontWeight: 600 }}>松开鼠标上传</p>
+          ) : file ? (
+            <p>📄 {file.name}<br /><span style={{ fontSize: 12, color: "#888" }}>{(file.size / 1024 / 1024).toFixed(1)} MB · 点击重新选择</span></p>
           ) : (
-            <p>点击选择 PDF 文件（课本或教辅）</p>
+            <p>📂 拖拽 PDF 到这里，或点击选择文件</p>
           )}
         </div>
 
-        {uploadState !== "idle" && (
+        {statusMsg && (
           <div className={`status-msg ${uploadState}`}>{statusMsg}</div>
         )}
 
