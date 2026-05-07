@@ -80,14 +80,24 @@ export default function KnowledgePage() {
     setStatusMsg("正在上传文件…");
 
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("bucket", "knowledge");
-      // No folder param — upload route uses timestamp-only key to avoid Chinese path issues
+      // Step 1: Get a signed upload URL from server (bypasses Next.js body size limit)
+      const signedRes = await fetch("/api/upload/signed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bucket: "knowledge", fileName: file.name }),
+      });
+      const signedData = await signedRes.json();
+      if (!signedRes.ok) throw new Error(signedData.error);
 
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: fd });
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadData.error);
+      // Step 2: Upload directly to Supabase from the browser
+      const putRes = await fetch(signedData.signedUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": "application/pdf" },
+      });
+      if (!putRes.ok) throw new Error("上传到存储失败，请重试");
+
+      const uploadData = { filePath: signedData.filePath };
 
       setUploadState("processing");
       setStatusMsg("AI 正在提取考点知识库，请稍候（约30-60秒）…");

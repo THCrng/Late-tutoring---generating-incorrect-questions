@@ -93,13 +93,24 @@ export default function ExamsPage() {
     setStatusMsg("正在上传试卷…");
 
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("bucket", "exams");
+      // Step 1: Get a signed upload URL from server (bypasses Next.js body size limit)
+      const signedRes = await fetch("/api/upload/signed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bucket: "exams", fileName: file.name }),
+      });
+      const signedData = await signedRes.json();
+      if (!signedRes.ok) throw new Error(signedData.error);
 
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: fd });
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadData.error);
+      // Step 2: Upload directly to Supabase from the browser
+      const putRes = await fetch(signedData.signedUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": "application/pdf" },
+      });
+      if (!putRes.ok) throw new Error("上传到存储失败，请重试");
+
+      const uploadData = { filePath: signedData.filePath };
 
       setUploadState("analyzing");
       setStatusMsg("AI 正在深度分析试卷考点和出题规律（约30-60秒）…");
