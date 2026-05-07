@@ -346,6 +346,21 @@ body {
   background: #f0f5ff;
 }
 
+.btn-download-exam {
+  padding: 3px 10px;
+  background: white;
+  color: #1a56db;
+  border: 1px solid #1a56db;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-download-exam:hover {
+  background: #eff6ff;
+}
+
 /* ── 报告全屏覆盖 ── */
 .report-overlay {
   position: fixed;

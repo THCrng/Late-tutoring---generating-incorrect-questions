@@ -18,6 +18,7 @@ interface ExamRecord {
   exam_type: string;
   year: number;
   term: string;
+  file_url: string;
   file_name: string;
   analysis: {
     knowledgeDistribution: Array<{ topic: string; frequency: number; percentage: number }>;
@@ -231,6 +232,20 @@ export default function ExamsPage() {
     setSelectedIds(new Set());
   }
 
+  async function handleDownload(exam: ExamRecord) {
+    const { data, error } = await supabaseBrowser.storage
+      .from("exams")
+      .createSignedUrl(exam.file_url, 120); // 2-minute link
+    if (error || !data) {
+      alert("生成下载链接失败：" + error?.message);
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = data.signedUrl;
+    a.download = exam.file_name || exam.file_url;
+    a.click();
+  }
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -440,8 +455,14 @@ export default function ExamsPage() {
                         <span key={k} className="kc-tag">{k}</span>
                       ))}
                     </div>
-                    <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>
-                      点击展开分析报告
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                      <span style={{ fontSize: 12, color: "#9ca3af" }}>点击展开分析报告</span>
+                      <button
+                        className="btn-download-exam"
+                        onClick={(e) => { e.stopPropagation(); handleDownload(exam); }}
+                      >
+                        ⬇ 下载原卷
+                      </button>
                     </div>
 
                     {selectedExam?.id === exam.id && exam.analysis && (
