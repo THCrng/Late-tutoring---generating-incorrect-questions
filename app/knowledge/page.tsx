@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { supabaseBrowser } from "@/lib/supabase-browser";
 
 const SUBJECTS = ["数学", "语文", "英语"];
 const GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "初一", "初二", "初三"];
@@ -80,7 +81,7 @@ export default function KnowledgePage() {
     setStatusMsg("正在上传文件…");
 
     try {
-      // Step 1: Get a signed upload URL from server (bypasses Next.js body size limit)
+      // Step 1: Get signed upload URL + token from server
       const signedRes = await fetch("/api/upload/signed", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -89,13 +90,13 @@ export default function KnowledgePage() {
       const signedData = await signedRes.json();
       if (!signedRes.ok) throw new Error(signedData.error);
 
-      // Step 2: Upload directly to Supabase from the browser
-      const putRes = await fetch(signedData.signedUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": "application/pdf" },
-      });
-      if (!putRes.ok) throw new Error("上传到存储失败，请重试");
+      // Step 2: Upload directly to Supabase from browser using SDK (handles CORS + auth)
+      const { error: uploadError } = await supabaseBrowser.storage
+        .from("knowledge")
+        .uploadToSignedUrl(signedData.filePath, signedData.token, file, {
+          contentType: "application/pdf",
+        });
+      if (uploadError) throw new Error("上传失败：" + uploadError.message);
 
       const uploadData = { filePath: signedData.filePath };
 
