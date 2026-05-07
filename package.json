@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",
+    "@napi-rs/canvas": "^1.0.0",
     "@supabase/supabase-js": "^2.105.3",
     "@types/pdf-parse": "^1.1.5",
     "html2pdf.js": "^0.14.0",
