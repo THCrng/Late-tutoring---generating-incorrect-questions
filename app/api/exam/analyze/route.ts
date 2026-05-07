@@ -96,7 +96,12 @@ async function renderPdfToImages(buffer: Buffer, maxPages = 6): Promise<string[]
   const { createCanvas } = require("@napi-rs/canvas") as any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  // Point to the actual worker file so pdfjs can run it in a worker thread
+  const workerPath = require("path").resolve(
+    process.cwd(),
+    "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"
+  );
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${workerPath}`;
 
   const canvasFactory = {
     create(width: number, height: number) {
@@ -132,8 +137,11 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    // Disable worker in Node.js environment
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+    const workerPath = require("path").resolve(
+      process.cwd(),
+      "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${workerPath}`;
     const data = new Uint8Array(buffer);
     const pdf = await pdfjsLib.getDocument({ data, useWorkerFetch: false, isEvalSupported: false }).promise;
     const pageTexts: string[] = [];
