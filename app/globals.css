@@ -1,0 +1,373 @@
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: #f0f0f0;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 操作区（输入表单、工具栏） ── */
+.toolbar {
+  background: #1a56db;
+  color: white;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-right: auto;
+}
+
+.input-area {
+  max-width: 800px;
+  margin: 32px auto;
+  padding: 0 16px;
+}
+
+.selector-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.selector-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #444;
+  font-weight: 600;
+}
+
+.selector-row select {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+}
+
+textarea {
+  width: 100%;
+  height: 140px;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1.7;
+  resize: vertical;
+  background: white;
+}
+
+textarea::placeholder {
+  color: #aaa;
+}
+
+.btn-generate {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  background: #1a56db;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-generate:hover {
+  background: #1245b5;
+}
+
+.btn-generate:disabled {
+  background: #93b4f5;
+  cursor: not-allowed;
+}
+
+/* ── 打印工具栏 ── */
+.print-toolbar {
+  max-width: 800px;
+  margin: 0 auto 16px;
+  padding: 0 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-print {
+  padding: 10px 24px;
+  background: #16a34a;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-print:hover {
+  background: #15803d;
+}
+
+.btn-reset {
+  padding: 10px 20px;
+  background: white;
+  color: #444;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* ── 加载动画 ── */
+.loading-wrap {
+  text-align: center;
+  padding: 80px 16px;
+  color: #555;
+}
+
+.spinner {
+  width: 44px;
+  height: 44px;
+  border: 4px solid #dde;
+  border-top-color: #1a56db;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 错误提示 ── */
+.error-box {
+  max-width: 500px;
+  margin: 60px auto;
+  padding: 20px;
+  background: #fee2e2;
+  border: 1px solid #f87171;
+  border-radius: 8px;
+  text-align: center;
+  color: #991b1b;
+}
+
+/* ══════════════════════════════════════
+   A4 练习题页面样式
+══════════════════════════════════════ */
+.worksheet-wrap {
+  padding-bottom: 60px;
+}
+
+.a4-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 14mm 18mm;
+  margin: 24px auto;
+  background: white;
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.15);
+  font-family: 'STSong', 'SimSun', 'Noto Serif CJK SC', 'Source Han Serif CN', serif;
+  font-size: 11.5pt;
+  line-height: 1.9;
+  color: #111;
+}
+
+/* 页眉 */
+.page-header {
+  border-bottom: 2px solid #111;
+  padding-bottom: 6px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.page-header h2 {
+  font-size: 15pt;
+  font-weight: 900;
+}
+
+.page-meta {
+  font-size: 10pt;
+  color: #444;
+  display: flex;
+  gap: 20px;
+}
+
+/* 每个知识点区块 */
+.section-block {
+  margin-bottom: 18px;
+}
+
+.section-title {
+  font-size: 12.5pt;
+  font-weight: 900;
+  background: #f3f4f6;
+  border-left: 4px solid #1a56db;
+  padding: 4px 10px;
+  margin-bottom: 6px;
+}
+
+.section-goal {
+  font-size: 9.5pt;
+  color: #555;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+/* 单道题 */
+.exercise-block {
+  margin-bottom: 12px;
+  page-break-inside: avoid;
+}
+
+.exercise-header {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-weight: 700;
+}
+
+.ex-num {
+  font-size: 12pt;
+  min-width: 20px;
+}
+
+.ex-type {
+  font-size: 9pt;
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.ex-diff-challenge {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.exercise-instruction {
+  margin-left: 26px;
+  margin-top: 2px;
+  font-size: 10.5pt;
+}
+
+.hint-box {
+  margin-left: 26px;
+  font-size: 9pt;
+  color: #6b7280;
+  background: #fef9c3;
+  border-left: 3px solid #fbbf24;
+  padding: 2px 8px;
+  margin-top: 3px;
+  margin-bottom: 4px;
+}
+
+.item-line {
+  margin-left: 26px;
+  padding: 2px 0;
+  font-size: 11pt;
+}
+
+/* 竖式/计算留白框 */
+.workspace-box {
+  margin: 6px 26px 6px;
+  border: 1px dashed #aaa;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.workspace-line {
+  border-bottom: 1px dotted #ccc;
+  height: 22px;
+  margin: 2px 0;
+}
+
+/* 应用题答题栏 */
+.answer-lines {
+  margin-left: 26px;
+}
+
+.answer-line {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.answer-label {
+  min-width: 42px;
+  font-weight: 700;
+  font-size: 10.5pt;
+}
+
+.answer-blank {
+  flex: 1;
+  border-bottom: 1px solid #555;
+  height: 20px;
+}
+
+/* ══════════════════════════════════════
+   打印模式（清除所有屏幕装饰）
+══════════════════════════════════════ */
+@media print {
+  html,
+  body {
+    background: white;
+    margin: 0;
+    padding: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 14mm 18mm;
+  }
+
+  .worksheet-wrap {
+    padding: 0;
+  }
+
+  .a4-page {
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .a4-page:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .exercise-block {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .section-title {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
