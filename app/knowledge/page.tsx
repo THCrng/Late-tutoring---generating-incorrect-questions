@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 const SUBJECTS = ["数学", "语文", "英语"];
 const GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "初一", "初二", "初三"];
 const TEXTBOOKS = ["人教版（2026版）", "广州教科版（2026版）", "广州沪教牛津版（2026版）"];
+const VOLUMES = ["上册", "下册"];
 
 interface KnowledgePoint {
   id: string;
@@ -23,6 +24,7 @@ export default function KnowledgePage() {
   const [subject, setSubject] = useState("数学");
   const [grade, setGrade] = useState("三年级");
   const [textbook, setTextbook] = useState("人教版（2026版）");
+  const [volume, setVolume] = useState("上册");
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -97,7 +99,7 @@ export default function KnowledgePage() {
           filePath: uploadData.filePath,
           subject,
           grade,
-          textbook,
+          textbook: `${textbook}${volume}`,
           fileName: file.name,
         }),
       });
@@ -138,6 +140,12 @@ export default function KnowledgePage() {
             教材版本
             <select value={textbook} onChange={(e) => setTextbook(e.target.value)}>
               {TEXTBOOKS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+          <label>
+            册次
+            <select value={volume} onChange={(e) => setVolume(e.target.value)}>
+              {VOLUMES.map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
           </label>
         </div>
