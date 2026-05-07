@@ -33,8 +33,9 @@ const ANALYZE_PROMPT = `你是一位专业的教育测量专家。请深度分�
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require("pdf-parse");
-  const parsed = await pdfParse(buffer);
+  const mod = require("pdf-parse");
+  const fn = typeof mod === "function" ? mod : (mod.default ?? mod);
+  const parsed = await fn(buffer);
   return parsed.text ?? "";
 }
 
@@ -98,26 +99,17 @@ export async function POST(req: NextRequest) {
       console.warn("pdf-parse failed, falling back to vision:", e);
     }
 
-    if (pdfText && pdfText.trim().length > 100) {
-      // Digital PDF: send as text
-      responseText = await callClaude([{
-        role: "user",
-        content: `${systemPrompt}\n\n试卷内容：\n${pdfText.slice(0, 8000)}`,
-      }]);
-    } else {
-      // Scanned PDF: send as base64 image to Claude vision
-      const base64 = buffer.toString("base64");
-      responseText = await callClaude([{
-        role: "user",
-        content: [
-          { type: "text", text: systemPrompt },
-          {
-            type: "image_url",
-            image_url: { url: `data:application/pdf;base64,${base64}` },
-          },
-        ],
-      }]);
+    if (!pdfText || pdfText.trim().length < 50) {
+      return NextResponse.json({
+        error: "无法提取PDF文字内容。请确认上传的是【可搜索的电子版PDF】，而非手机拍照或扫描的图片PDF。可以尝试用电脑直接打开PDF，若能选中文字则可以上传。",
+      }, { status: 400 });
     }
+
+    // Digital PDF: send text to Claude
+    responseText = await callClaude([{
+      role: "user",
+      content: `${systemPrompt}\n\n试卷内容：\n${pdfText.slice(0, 8000)}`,
+    }]);
 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
