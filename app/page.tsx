@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import WorksheetPreview, { WorksheetData } from "../components/WorksheetPreview";
 
 const GRADES = [
@@ -27,31 +27,60 @@ const PAGE_COUNT_OPTIONS = [
   { value: "1", label: "1页" },
   { value: "2", label: "2页（推荐）" },
   { value: "3", label: "3页" },
+  { value: "4", label: "4页" },
+];
+
+const VOLUME_OPTIONS = [
+  { value: "", label: "不限" },
+  { value: "上册", label: "上册" },
+  { value: "下册", label: "下册" },
 ];
 
 type State = "idle" | "loading" | "preview" | "error";
+type InputMode = "gaps" | "wechat";
 
 export default function Home() {
+  const [inputMode, setInputMode] = useState<InputMode>("gaps");
   const [gaps, setGaps] = useState("");
+  const [wechatText, setWechatText] = useState("");
   const [grade, setGrade] = useState("三年级");
   const [textbook, setTextbook] = useState("人教版（2026版）");
+  const [volume, setVolume] = useState("");
   const [difficulty, setDifficulty] = useState("0.80");
   const [pageCount, setPageCount] = useState("2");
   const [uiState, setUiState] = useState<State>("idle");
   const [worksheetData, setWorksheetData] = useState<WorksheetData | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [targetNodes, setTargetNodes] = useState<string[]>([]);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("targetNodes");
+    if (stored) {
+      const nodes: string[] = JSON.parse(stored);
+      sessionStorage.removeItem("targetNodes");
+      if (nodes.length) {
+        setTargetNodes(nodes);
+        setGaps((prev) => prev || nodes.join("\n"));
+      }
+    }
+  }, []);
+
+  const canGenerate = inputMode === "gaps" ? !!gaps.trim() : !!wechatText.trim();
 
   async function handleGenerate() {
-    if (!gaps.trim()) return;
+    if (!canGenerate) return;
     setUiState("loading");
     setErrorMsg("");
 
     try {
+      const body = inputMode === "wechat"
+        ? { wechatText, grade, textbook, volume, difficulty, pageCount, targetNodes }
+        : { gaps, grade, textbook, volume, difficulty, pageCount, targetNodes };
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gaps, grade, textbook, difficulty, pageCount }),
+        body: JSON.stringify(body),
       });
 
       let json: unknown;
@@ -76,10 +105,13 @@ export default function Home() {
 
   async function handleExportPDF() {
     setExporting(true);
+    const element = document.querySelector(".worksheet-wrap") as HTMLElement;
+    if (!element) { setExporting(false); return; }
+
+    // Remove inter-page screen margins so html2pdf paginates at exact A4 boundaries
+    element.classList.add("exporting");
     try {
       const { default: html2pdf } = await import("html2pdf.js");
-      const element = document.querySelector(".worksheet-wrap") as HTMLElement;
-      if (!element) return;
       const filename = `练习题_${worksheetData?.grade}_${worksheetData?.date}.pdf`;
       await html2pdf()
         .set({
@@ -92,6 +124,7 @@ export default function Home() {
         .from(element)
         .save();
     } finally {
+      element.classList.remove("exporting");
       setExporting(false);
     }
   }
@@ -100,7 +133,7 @@ export default function Home() {
     return (
       <div className="loading-wrap no-print">
         <div className="spinner" />
-        <p>AI 正在根据{textbook}教材生成练习题…</p>
+        <p>AI 正在{inputMode === "wechat" ? "解析微信反馈并" : ""}根据{textbook}{volume ? `${volume}` : ""}教材生成练习题…</p>
         <p style={{ fontSize: 13, color: "#888", marginTop: 6 }}>
           通常需要 15–30 秒
         </p>
@@ -138,7 +171,7 @@ export default function Home() {
             ← 重新生成
           </button>
           <span style={{ fontSize: 13, color: "#666" }}>
-            {worksheetData.grade} · {worksheetData.textbook} · 难度{difficulty} · {worksheetData.date}
+            {worksheetData.grade} · {worksheetData.textbook}{volume ? ` ${volume}` : ""} · 难度{difficulty} · {worksheetData.date}
           </span>
         </div>
         <WorksheetPreview data={worksheetData} />
@@ -166,6 +199,12 @@ export default function Home() {
           </select>
         </label>
         <label>
+          上下册
+          <select value={volume} onChange={(e) => setVolume(e.target.value)}>
+            {VOLUME_OPTIONS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+          </select>
+        </label>
+        <label>
           试卷难度系数
           <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
             {DIFFICULTY_OPTIONS.map((d) => (
@@ -187,22 +226,59 @@ export default function Home() {
         难度系数 = 预期平均分 ÷ 满分。系数越小题目越难，0.80 表示预期得分约 80%。
       </div>
 
-      <textarea
-        value={gaps}
-        onChange={(e) => setGaps(e.target.value)}
-        placeholder={"输入今天记录的知识薄弱点，每行一个或用逗号分隔，例如：\n分数化简\n带小数点的竖式除法\n多边形内角和公式"}
-      />
+      {/* 输入模式切换 */}
+      <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", border: "1px solid #ccc" }}>
+        <button
+          onClick={() => setInputMode("gaps")}
+          style={{
+            flex: 1, padding: "9px 0", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600,
+            background: inputMode === "gaps" ? "#1a56db" : "white",
+            color: inputMode === "gaps" ? "white" : "#555",
+            transition: "all 0.15s",
+          }}
+        >
+          手动输入知识点
+        </button>
+        <button
+          onClick={() => setInputMode("wechat")}
+          style={{
+            flex: 1, padding: "9px 0", border: "none", borderLeft: "1px solid #ccc", cursor: "pointer", fontSize: 14, fontWeight: 600,
+            background: inputMode === "wechat" ? "#1a56db" : "white",
+            color: inputMode === "wechat" ? "white" : "#555",
+            transition: "all 0.15s",
+          }}
+        >
+          微信反馈生成
+        </button>
+      </div>
+
+      {inputMode === "gaps" ? (
+        <textarea
+          value={gaps}
+          onChange={(e) => setGaps(e.target.value)}
+          placeholder={"输入今天记录的知识薄弱点，每行一个或用逗号分隔，例如：\n分数化简\n带小数点的竖式除法\n多边形内角和公式"}
+        />
+      ) : (
+        <textarea
+          value={wechatText}
+          onChange={(e) => setWechatText(e.target.value)}
+          placeholder={"粘贴老师的微信反馈内容，AI 会自动提取学生薄弱点并出题。例如：\n\n今天孩子做作业，分数加减法老是搞错，尤其是异分母的那种\n应用题审题不仔细，单位换算也不太会"}
+          style={{ height: 160 }}
+        />
+      )}
 
       <button
         className="btn-generate"
         onClick={handleGenerate}
-        disabled={!gaps.trim()}
+        disabled={!canGenerate}
       >
-        生成练习题（{pageCount}页A4）
+        {inputMode === "wechat" ? "解析反馈并生成练习题" : "生成练习题"}（{pageCount}页A4）
       </button>
 
       <p style={{ marginTop: 16, fontSize: 12, color: "#888", textAlign: "center" }}>
-        AI 将根据{textbook}知识点自动出题，生成后可直接打印或导出 PDF
+        {inputMode === "wechat"
+          ? "AI 将先从微信内容中提取薄弱点，再根据教材自动出题"
+          : `AI 将根据${textbook}${volume ? volume : ""}知识点自动出题，生成后可直接打印或导出 PDF`}
       </p>
     </div>
   );

@@ -25,6 +25,26 @@ async function getKnowledgeContext(grade: string, gaps: string): Promise<string>
   }
 }
 
+async function getKnowledgeTreeContext(grade: string, subject: string): Promise<string> {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) return "";
+  try {
+    const { supabase } = await import("@/lib/supabase");
+    const { data } = await supabase
+      .from("knowledge_tree")
+      .select("markdown, textbook, source_file")
+      .eq("grade", grade)
+      .eq("subject", subject)
+      .order("created_at", { ascending: false })
+      .limit(2);
+    if (!data?.length) return "";
+    return data
+      .map((t) => `【${t.textbook} 知识框架】\n${t.markdown.slice(0, 1500)}`)
+      .join("\n\n---\n\n");
+  } catch {
+    return "";
+  }
+}
+
 async function getExamContext(grade: string, subject: string): Promise<string> {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) return "";
   try {
@@ -121,11 +141,14 @@ const PROMPT_TEMPLATE = `你是一位专业的中国小学/初中练习册编写
 4. JSON字符串内不得使用英文双引号（"），如需标注选项用（）括号代替
 
 ### 版面规则（严格遵守，这是打印约束）
-- 共生成 {{PAGE_COUNT}} 页A4
-- 每页物理约束：可打印高度 269mm，字号 11pt，行距 1.6，每页最多容纳 42 行内容
-- 每个知识点最多出 4 道题，每道题的 items 最多 5 条
-- 若知识点数量多，优先减少每个知识点的题量，确保不超页
-- 宁可内容偏少也不要超出一页的物理限制，否则打印会溢出变成多页
+- 共生成 {{PAGE_COUNT}} 页A4，每页是一个独立的 page 对象
+- 每页物理约束：可打印高度 269mm，字号 11pt，行距 1.6，每页最多容纳 **38 行**内容（含页眉约占4行）
+- 行数估算方法：section标题=2行，goal=1行，每道题的instruction=1行，每条item=1行，socratesHint=1行，题之间间距=0.5行
+- 每个知识点最多出 3 道题，每道题的 items 最多 4 条
+- 所有题目必须完整写入 JSON items 数组，**不得省略或留空 items**
+- 每个知识点分配到哪一页，请在脑中先做行数加法，确认不超38行再写入该页
+- 若知识点数量多，优先减少每个知识点的题量，或将知识点拆分到不同页
+- 宁可每页内容偏少（30-35行），也不能超出38行，否则打印时会溢出到多余的页面
 
 ## 输出格式
 必须严格返回以下JSON结构，不要有任何额外文字或markdown代码块标记：
@@ -160,12 +183,36 @@ const PROMPT_TEMPLATE = `你是一位专业的中国小学/初中练习册编写
 
 type 只能是以下之一："填空" | "计算" | "判断" | "应用" | "连线"`;
 
+async function extractGapsFromWechat(wechatText: string, apiKey: string): Promise<string> {
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 512,
+      stream: false,
+      messages: [{
+        role: "user",
+        content: `你是一位教学助理。以下是老师在微信上发送的反馈记录，请从中提取学生的知识薄弱点。
+直接输出薄弱点列表，每行一个，不要任何前缀或解释。只列出具体的知识点，不超过15条。
+
+微信内容：
+${wechatText.slice(0, 4000)}`,
+      }],
+    }),
+  });
+  if (!res.ok) return "";
+  const data = await res.json();
+  return (data.choices?.[0]?.message?.content ?? "").trim();
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { gaps, grade, textbook, difficulty, pageCount } = await req.json();
+    const { gaps, wechatText, grade, textbook, volume, difficulty, pageCount, targetNodes } = await req.json();
 
-    if (!gaps || !gaps.trim()) {
-      return NextResponse.json({ error: "请输入知识薄弱点" }, { status: 400 });
+    if (!gaps?.trim() && !wechatText?.trim()) {
+      return NextResponse.json({ error: "请输入知识薄弱点或微信反馈内容" }, { status: 400 });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -195,9 +242,17 @@ export async function POST(req: NextRequest) {
       return "数学";
     })();
 
-    const [knowledgeContext, examContext] = await Promise.all([
-      getKnowledgeContext(resolvedGrade, gaps.trim()),
+    // If wechatText is provided, extract knowledge gaps from it first
+    let baseGaps = gaps?.trim() || "";
+    if (wechatText?.trim()) {
+      const extracted = await extractGapsFromWechat(wechatText, apiKey);
+      baseGaps = extracted || wechatText.trim();
+    }
+
+    const [knowledgeContext, examContext, treeContext] = await Promise.all([
+      getKnowledgeContext(resolvedGrade, baseGaps),
       getExamContext(resolvedGrade, resolvedSubject),
+      getKnowledgeTreeContext(resolvedGrade, resolvedSubject),
     ]);
 
     const knowledgeSection = knowledgeContext
@@ -206,12 +261,22 @@ export async function POST(req: NextRequest) {
     const examSection = examContext
       ? `\n\n## 学校历年考试风格参考（请参考该校出题偏好）\n${examContext}`
       : "";
+    const treeSection = treeContext
+      ? `\n\n## 教材层级知识图谱（精确对应教材章节结构，出题时严格对应所属层级）\n${treeContext}`
+      : "";
 
-    const prompt = (PROMPT_TEMPLATE + knowledgeSection + examSection)
-      .replace(/{{GAPS}}/g, gaps.trim())
+    // If teacher selected specific nodes from mind map, prepend them to gaps
+    const effectiveGaps = targetNodes?.length
+      ? `${(targetNodes as string[]).join("\n")}\n${baseGaps}`
+      : baseGaps;
+
+    const effectiveTextbook = [textbook || "人教版（2026版）", volume || ""].filter(Boolean).join("");
+
+    const prompt = (PROMPT_TEMPLATE + knowledgeSection + examSection + treeSection)
+      .replace(/{{GAPS}}/g, effectiveGaps)
       .replace(/{{DATE}}/g, today)
       .replace(/{{GRADE}}/g, resolvedGrade)
-      .replace(/{{TEXTBOOK}}/g, textbook || "人教版（2026版）")
+      .replace(/{{TEXTBOOK}}/g, effectiveTextbook)
       .replace(/{{DIFFICULTY}}/g, diffCoeff.toFixed(2))
       .replace(/{{DIFFICULTY_DESC}}/g, desc)
       .replace(/{{DIFFICULTY_DIST}}/g, dist)

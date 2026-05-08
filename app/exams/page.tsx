@@ -14,7 +14,7 @@ interface ExamQuestion {
   number: string;
   type: string;
   score: number;
-  content: string;
+  articleCategory?: string;
   specificItems: string[];
   knowledgePoints: string[];
 }
@@ -37,12 +37,6 @@ interface ExamRecord {
       specificContent: string;
       sourceQuestions: string[];
     }>;
-    questionTypes: Array<{ type: string; count: number; percentage: number }>;
-    difficultyProfile: { basic: number; medium: number; hard: number; coefficient: number };
-    schoolStyle: string;
-    keyFocusAreas: string[];
-    weaknessPatterns: string[];
-    suggestions: string[];
   };
   created_at: string;
 }
@@ -67,7 +61,7 @@ interface QueueItem {
 
 // ── 文件名解析器 ──────────────────────────────────────────────────────────────
 function parseFilename(filename: string, defaults: FileMeta): FileMeta {
-  const name = filename.replace(/\.pdf$/i, "");
+  const name = filename.replace(/\.(pdf|docx)$/i, "");
 
   // 年份：优先取4位数字
   const yearMatch = name.match(/20(\d{2})/);
@@ -174,6 +168,7 @@ function ExamReportView({ exams, onClose }: { exams: ExamRecord[]; onClose: () =
                               <div className="report-question-header">
                                 <span className="rq-number">{q.number}</span>
                                 <span className="rq-type">{q.type}</span>
+                                {q.articleCategory && <span className="rq-type" style={{ background: "#d1fae5", color: "#065f46" }}>{q.articleCategory}</span>}
                                 {q.score > 0 && <span className="rq-score">{q.score}分</span>}
                               </div>
                               {q.specificItems?.length > 0 && (
@@ -191,74 +186,25 @@ function ExamReportView({ exams, onClose }: { exams: ExamRecord[]; onClose: () =
                         </div>
                       )}
 
-                      {/* 考点分布（含具体内容） */}
-                      <div className="report-section">
-                        <div className="report-section-title">考点分布</div>
-                        {exam.analysis.knowledgeDistribution?.slice(0, 8).map(kd => (
-                          <div key={kd.topic} style={{ marginBottom: 8 }}>
-                            <div className="dist-bar-row">
-                              <span className="dist-label">{kd.topic}</span>
-                              <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
-                              <span className="dist-pct">{kd.percentage}%</span>
-                            </div>
-                            {kd.specificContent && (
-                              <div style={{ fontSize: 11, color: "#555", marginTop: 2, paddingLeft: 4 }}>
-                                {kd.specificContent}
-                                {kd.sourceQuestions?.length > 0 && <span style={{ color: "#9ca3af" }}> 【{kd.sourceQuestions.join("、")}】</span>}
+                      {/* 考点分布 */}
+                      {exam.analysis.knowledgeDistribution?.length > 0 && (
+                        <div className="report-section">
+                          <div className="report-section-title">考点分布</div>
+                          {exam.analysis.knowledgeDistribution.map(kd => (
+                            <div key={kd.topic} style={{ marginBottom: 8 }}>
+                              <div className="dist-bar-row">
+                                <span className="dist-label">{kd.topic}</span>
+                                <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
+                                <span className="dist-pct">{kd.percentage}%</span>
                               </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="report-grid">
-                        <div className="report-section">
-                          <div className="report-section-title">题型分布</div>
-                          {exam.analysis.questionTypes?.map(qt => (
-                            <div key={qt.type} style={{ fontSize: 12, marginBottom: 3 }}>{qt.type}：{qt.count}题（{qt.percentage}%）</div>
+                              {kd.specificContent && (
+                                <div style={{ fontSize: 11, color: "#555", marginTop: 2, paddingLeft: 4 }}>
+                                  {kd.specificContent}
+                                  {kd.sourceQuestions?.length > 0 && <span style={{ color: "#9ca3af" }}> 【{kd.sourceQuestions.join("、")}】</span>}
+                                </div>
+                              )}
+                            </div>
                           ))}
-                        </div>
-                        <div className="report-section">
-                          <div className="report-section-title">难度分布</div>
-                          <div style={{ fontSize: 12 }}>
-                            <div>基础题：{exam.analysis.difficultyProfile?.basic}%</div>
-                            <div>中等题：{exam.analysis.difficultyProfile?.medium}%</div>
-                            <div>难题：{exam.analysis.difficultyProfile?.hard}%</div>
-                            <div style={{ marginTop: 4, fontWeight: 700 }}>难度系数：{exam.analysis.difficultyProfile?.coefficient}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="report-section">
-                        <div className="report-section-title">高频考点（含规律）</div>
-                        <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.8 }}>
-                          {exam.analysis.keyFocusAreas?.map((k, i) => <li key={i}>{k}</li>)}
-                        </ul>
-                      </div>
-
-                      <div className="report-section">
-                        <div className="report-section-title">出题风格</div>
-                        <p style={{ fontSize: 12, lineHeight: 1.7 }}>{exam.analysis.schoolStyle}</p>
-                      </div>
-
-                      {exam.analysis.weaknessPatterns?.length > 0 && (
-                        <div className="report-section">
-                          <div className="report-section-title">学生易失分点</div>
-                          <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.8 }}>
-                            {exam.analysis.weaknessPatterns.map((w, i) => <li key={i}>{w}</li>)}
-                          </ul>
-                        </div>
-                      )}
-
-                      {exam.analysis.suggestions?.length > 0 && (
-                        <div className="report-section">
-                          <div className="report-section-title">备考建议</div>
-                          <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.8 }}>
-                            {(Array.isArray(exam.analysis.suggestions)
-                              ? exam.analysis.suggestions
-                              : [exam.analysis.suggestions]
-                            ).map((s, i) => <li key={i}>{s}</li>)}
-                          </ul>
                         </div>
                       )}
                     </>
@@ -318,6 +264,10 @@ export default function ExamsPage() {
   const [filterSubject, setFilterSubject] = useState("全部");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // inline editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ year: number; term: string; grade: string; subject: string; exam_type: string } | null>(null);
+
   async function fetchExams() {
     setLoading(true);
     try {
@@ -367,12 +317,48 @@ export default function ExamsPage() {
     }
   }
 
+  function startEdit(exam: ExamRecord) {
+    setEditingId(exam.id);
+    setEditDraft({ year: exam.year, term: exam.term, grade: exam.grade, subject: exam.subject, exam_type: exam.exam_type });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft(null);
+  }
+
+  async function saveEdit(id: string) {
+    if (!editDraft) return;
+    const res = await fetch(`/api/exams/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editDraft),
+    });
+    if (res.ok) {
+      setExams(prev => prev.map(e => e.id === id ? { ...e, ...editDraft } : e));
+      cancelEdit();
+    } else {
+      const data = await res.json();
+      alert("保存失败：" + (data.error || "未知错误"));
+    }
+  }
+
+  async function handleDeleteSelected() {
+    if (!confirm(`确定删除选中的 ${selectedIds.size} 条记录？此操作不可恢复。`)) return;
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      const res = await fetch(`/api/exams/${id}`, { method: "DELETE" });
+      if (res.ok) setExams(prev => prev.filter(e => e.id !== id));
+    }
+    setSelectedIds(new Set());
+  }
+
   // ── 添加文件到队列（自动解析文件名）──
   function addFiles(files: FileList | File[]) {
-    const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
-    if (pdfs.length === 0) return;
+    const docxFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".docx"));
+    if (docxFiles.length === 0) return;
     const defaults = PARSE_DEFAULTS;
-    const items: QueueItem[] = pdfs.map(f => ({
+    const items: QueueItem[] = docxFiles.map(f => ({
       id: `${Date.now()}-${Math.random()}`,
       file: f,
       status: "waiting",
@@ -433,7 +419,7 @@ export default function ExamsPage() {
         const { error: uploadError } = await supabaseBrowser.storage
           .from("exams")
           .uploadToSignedUrl(signedData.filePath, signedData.token, item.file, {
-            contentType: "application/pdf",
+            contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           });
         if (uploadError) throw new Error(uploadError.message);
         filePath = signedData.filePath;
@@ -454,23 +440,12 @@ export default function ExamsPage() {
           fileName: item.file.name,
         };
 
-        let res = await fetch("/api/exam/analyze", {
+        const res = await fetch("/api/exam/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(baseBody),
         });
-        let data = await res.json();
-
-        // Scanned PDF: ask server to render images and retry
-        if (res.status === 422 && data.error === "NEEDS_VISION") {
-          updateItem(item.id, { status: "analyzing", error: undefined });
-          res = await fetch("/api/exam/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...baseBody, useVision: true }),
-          });
-          data = await res.json();
-        }
+        const data = await res.json();
 
         if (!res.ok) throw new Error(data.error);
         updateItem(item.id, { status: "done" });
@@ -508,7 +483,7 @@ export default function ExamsPage() {
       <div className="card">
         <h3 className="card-title">批量上传试卷</h3>
         <p style={{ fontSize: 13, color: "#666", marginBottom: 10 }}>
-          系统自动从文件名识别年份、年级、学期、科目、考试类型，识别后可逐条修改。
+          上传 Word 格式（.docx）的试卷文件，系统自动从文件名识别年份、年级、学期、科目、考试类型，识别后可逐条修改。
         </p>
 
         <div
@@ -519,12 +494,12 @@ export default function ExamsPage() {
           onDrop={handleDrop}
         >
           <input
-            id="efile" type="file" accept=".pdf" multiple style={{ display: "none" }}
+            id="efile" type="file" accept=".docx" multiple style={{ display: "none" }}
             onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }}
           />
           {isDragging
             ? <p style={{ color: "#1a56db", fontWeight: 600 }}>松开鼠标添加到队列</p>
-            : <p>📂 拖拽多个 PDF 到这里，或点击选择文件（支持多选）</p>}
+            : <p>📂 拖拽多个 Word 文档到这里，或点击选择文件（.docx，支持多选）</p>}
         </div>
 
         {/* Queue list */}
@@ -622,6 +597,7 @@ export default function ExamsPage() {
             <>
               <span style={{ fontSize: 13, color: "#666" }}>已选 {selectedIds.size} 份</span>
               <button className="btn-export-report" onClick={() => setShowReport(true)}>导出分析报告</button>
+              <button className="btn-delete-exam" style={{ padding: "6px 14px", fontSize: 13 }} onClick={handleDeleteSelected}>删除所选（{selectedIds.size}）</button>
               <button className="btn-reset" style={{ padding: "6px 14px", fontSize: 13 }} onClick={clearSelection}>取消选择</button>
             </>
           )}
@@ -640,19 +616,50 @@ export default function ExamsPage() {
                     checked={selectedIds.has(exam.id)}
                     onChange={() => toggleSelect(exam.id)}
                     onClick={e => e.stopPropagation()} />
-                  <div style={{ flex: 1 }} onClick={() => setSelectedExam(selectedExam?.id === exam.id ? null : exam)}>
-                    <div className="ec-header">
-                      <span className="ec-title">{exam.year}年 {exam.term} · {exam.grade} {exam.subject} {exam.exam_type}</span>
-                      <span className="ec-meta">{exam.file_name}</span>
-                    </div>
-                    <div className="ec-tags" style={{ marginTop: 4 }}>
-                      {exam.analysis?.keyFocusAreas?.slice(0, 4).map(k => <span key={k} className="kc-tag">{k}</span>)}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-                      <span style={{ fontSize: 12, color: "#9ca3af" }}>点击展开分析报告</span>
-                      <button className="btn-download-exam" onClick={e => { e.stopPropagation(); handleDownload(exam); }}>⬇ 下载原卷</button>
-                      <button className="btn-delete-exam" onClick={e => { e.stopPropagation(); handleDelete(exam); }}>删除</button>
-                    </div>
+                  <div style={{ flex: 1 }}>
+                    {editingId === exam.id && editDraft ? (
+                      /* ── 编辑模式 ── */
+                      <div onClick={e => e.stopPropagation()}>
+                        <div className="bq-meta-row" style={{ marginBottom: 8 }}>
+                          <select value={String(editDraft.year)} onChange={e => setEditDraft({ ...editDraft, year: Number(e.target.value) })}>
+                            {YEARS.map(y => <option key={y} value={y}>{y}年</option>)}
+                          </select>
+                          <select value={editDraft.term} onChange={e => setEditDraft({ ...editDraft, term: e.target.value })}>
+                            {TERMS.map(t => <option key={t}>{t}</option>)}
+                          </select>
+                          <select value={editDraft.grade} onChange={e => setEditDraft({ ...editDraft, grade: e.target.value })}>
+                            {GRADES.map(g => <option key={g}>{g}</option>)}
+                          </select>
+                          <select value={editDraft.subject} onChange={e => setEditDraft({ ...editDraft, subject: e.target.value })}>
+                            {SUBJECTS.map(s => <option key={s}>{s}</option>)}
+                          </select>
+                          <select value={editDraft.exam_type} onChange={e => setEditDraft({ ...editDraft, exam_type: e.target.value })}>
+                            {EXAM_TYPES.map(t => <option key={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button className="btn-export-report" style={{ padding: "4px 14px", fontSize: 13 }} onClick={() => saveEdit(exam.id)}>保存</button>
+                          <button className="btn-reset" style={{ padding: "4px 12px", fontSize: 13 }} onClick={cancelEdit}>取消</button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── 正常显示模式 ── */
+                      <div onClick={() => setSelectedExam(selectedExam?.id === exam.id ? null : exam)}>
+                        <div className="ec-header">
+                          <span className="ec-title">{exam.year}年 {exam.term} · {exam.grade} {exam.subject} {exam.exam_type}</span>
+                          <span className="ec-meta">{exam.file_name}</span>
+                        </div>
+                        <div className="ec-tags" style={{ marginTop: 4 }}>
+                          {exam.analysis?.knowledgeDistribution?.slice(0, 4).map(kd => <span key={kd.topic} className="kc-tag">{kd.topic}</span>)}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                          <span style={{ fontSize: 12, color: "#9ca3af" }}>点击展开分析报告</span>
+                          <button className="btn-download-exam" onClick={e => { e.stopPropagation(); handleDownload(exam); }}>⬇ 下载原卷</button>
+                          <button className="btn-download-exam" style={{ color: "#374151", borderColor: "#d1d5db" }} onClick={e => { e.stopPropagation(); startEdit(exam); }}>编辑信息</button>
+                          <button className="btn-delete-exam" onClick={e => { e.stopPropagation(); handleDelete(exam); }}>删除</button>
+                        </div>
+                      </div>
+                    )}
 
                     {selectedExam?.id === exam.id && exam.analysis && (
                       <div className="exam-analysis">
@@ -665,6 +672,7 @@ export default function ExamsPage() {
                                 <div className="cq-header">
                                   <span className="cq-num">{q.number}</span>
                                   <span className="cq-type">{q.type}</span>
+                                  {q.articleCategory && <span className="cq-type" style={{ background: "#d1fae5", color: "#065f46" }}>{q.articleCategory}</span>}
                                   {q.score > 0 && <span className="cq-score">{q.score}分</span>}
                                 </div>
                                 {q.specificItems?.length > 0 && (
@@ -680,57 +688,27 @@ export default function ExamsPage() {
                           </div>
                         )}
 
-                        {/* 考点分布（含具体内容） */}
-                        <div className="analysis-section">
-                          <strong>考点分布</strong>
-                          <div className="dist-bars">
-                            {exam.analysis.knowledgeDistribution?.slice(0, 6).map(kd => (
-                              <div key={kd.topic} style={{ marginBottom: 6 }}>
-                                <div className="dist-bar-row">
-                                  <span className="dist-label">{kd.topic}</span>
-                                  <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
-                                  <span className="dist-pct">{kd.percentage}%</span>
-                                </div>
-                                {kd.specificContent && (
-                                  <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>
-                                    {kd.specificContent}
-                                    {kd.sourceQuestions?.length > 0 && <span style={{ color: "#9ca3af" }}> 【{kd.sourceQuestions.join("、")}】</span>}
+                        {/* 考点分布 */}
+                        {exam.analysis.knowledgeDistribution?.length > 0 && (
+                          <div className="analysis-section">
+                            <strong>考点分布</strong>
+                            <div className="dist-bars">
+                              {exam.analysis.knowledgeDistribution.map(kd => (
+                                <div key={kd.topic} style={{ marginBottom: 6 }}>
+                                  <div className="dist-bar-row">
+                                    <span className="dist-label">{kd.topic}</span>
+                                    <div className="dist-bar-bg"><div className="dist-bar-fill" style={{ width: `${Math.min(kd.percentage, 100)}%` }} /></div>
+                                    <span className="dist-pct">{kd.percentage}%</span>
                                   </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="analysis-section">
-                          <strong>题型分布</strong>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-                            {exam.analysis.questionTypes?.map(qt => <span key={qt.type} className="kc-tag">{qt.type} {qt.percentage}%</span>)}
-                          </div>
-                        </div>
-                        <div className="analysis-section">
-                          <strong>难度</strong>
-                          <p>基础 {exam.analysis.difficultyProfile?.basic}% / 中等 {exam.analysis.difficultyProfile?.medium}% / 难 {exam.analysis.difficultyProfile?.hard}%（系数约 {exam.analysis.difficultyProfile?.coefficient}）</p>
-                        </div>
-                        <div className="analysis-section">
-                          <strong>出题风格</strong>
-                          <p>{exam.analysis.schoolStyle}</p>
-                        </div>
-                        {exam.analysis.weaknessPatterns?.length > 0 && (
-                          <div className="analysis-section">
-                            <strong>学生易失分点</strong>
-                            <ul>{exam.analysis.weaknessPatterns.map((w, i) => <li key={i}>{w}</li>)}</ul>
-                          </div>
-                        )}
-                        {exam.analysis.suggestions?.length > 0 && (
-                          <div className="analysis-section">
-                            <strong>备考建议</strong>
-                            <ul>
-                              {(Array.isArray(exam.analysis.suggestions)
-                                ? exam.analysis.suggestions
-                                : [exam.analysis.suggestions]
-                              ).map((s, i) => <li key={i}>{s}</li>)}
-                            </ul>
+                                  {kd.specificContent && (
+                                    <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>
+                                      {kd.specificContent}
+                                      {kd.sourceQuestions?.length > 0 && <span style={{ color: "#9ca3af" }}> 【{kd.sourceQuestions.join("、")}】</span>}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>

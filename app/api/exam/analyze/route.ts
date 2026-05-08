@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { jsonrepair } from "jsonrepair";
+import Anthropic from "@anthropic-ai/sdk";
 
-const ANALYZE_PROMPT = `你是一位资深的一线语文/数学/英语教研员，擅长精准解读学校考试试卷，为备考提供落地建议。
+export const maxDuration = 300; // 5 minutes — scanned PDF vision analysis can take 2-3 min
+
+const ANALYZE_PROMPT = `你是一位资深语文/数学/英语教研员，请精准解读以下试卷。
 
 试卷信息：
 - 学校：{{SCHOOL}}
@@ -11,108 +14,170 @@ const ANALYZE_PROMPT = `你是一位资深的一线语文/数学/英语教研员
 - 类型：{{EXAM_TYPE}}
 - 学期：{{YEAR}}{{TERM}}
 
-## 分析深度要求（核心规则，必须严格执行）
+## 只输出 knowledgeDistribution（考点分布）
 
-### 规则1：逐题还原（questions字段）
-必须逐大题列出，每道题写明：
-- 题型名称（如：看拼音写汉字、按课文填空、阅读理解）
-- 总分值
-- 具体考查内容：列出每个小题的核心词语/字/句/知识点（不是题型描述，是具体内容）
-  例：specificItems应写 ["chūn tiān→春天", "xiǎo gǒu→小狗"] 而非 ["拼音题"]
-  例：specificItems应写 ["第1题考加减法：3+4=___", "第3题：一共有多少个苹果"] 而非 ["计算题"]
-- knowledgePoints具体到字词层面：["生字：春、天、狗、草"] 而非 ["生字认读"]
+根据提供的题目清单，按考点归类输出，每条包含：
+- topic：考点名称
+- percentage：占总分比例（数字）
+- specificContent：具体说明考查的词语/语法/知识点及题号（必须具体，不能只写类别）
+  ✅ "代词（my/I/me/myself）、冠词（a/an/the）、介词（be strict with）——第一大题第1-10题"
+  ❌ "语法知识"
+- sourceQuestions：来源题号数组
 
-### 规则2：考点必须具体（knowledgeDistribution字段）
-每个考点的specificContent必须说明具体考查的字词/内容：
-- ✅ 正确："本册生字：春、天、狗、草、木、禾（第一、三单元），主要以看拼音写汉字形式出现"
-- ❌ 错误："生字认读与书写"（只有类别名，没有具体字）
+## 输出格式（只输出JSON，不加任何前缀或markdown代码块）
 
-sourceQuestions必须填写来源题号（如第一题、第三题第2小题）。
+{"knowledgeDistribution": [
+  {
+    "topic": "语法知识运用",
+    "percentage": 15,
+    "specificContent": "代词（my/I/me/myself）、冠词（a/an/the）、介词（be strict with）——第一大题第1-10题",
+    "sourceQuestions": ["第一大题"]
+  }
+]}
 
-### 规则3：描述必须有据可依，禁止空话
-所有文字字段（schoolStyle / weaknessPatterns / suggestions）：
-- 每句话必须引用试卷中真实存在的题目或内容作为依据
-- 禁止出现以下类型的空话：
-  "总体来看..." / "建议加强..." / "注重培养..." / "全面提升..." / "综合能力..."
-- weaknessPatterns每条格式：【第X题/X题型】+具体原因+失分表现
-  例："【第三题看拼音写汉字】多笔画字（蛙、草、禾）字形复杂，易混淆笔顺，历届考题显示该类字失分率高"
-- suggestions每条格式：【针对X考点/题型】+具体可操作方法
-  例："【针对第一题加减运算】每日练习20道口算，重点加强进位加法（如8+7、9+6）"
+约束：字符串内不得使用英文双引号，percentage必须是数字`;
 
-## 返回JSON格式（只输出JSON，无任何额外文字或markdown代码块）
+// Prompt for per-batch question extraction (much shorter than ANALYZE_PROMPT)
+const BATCH_EXTRACT_PROMPT = `你是试卷题目识别助手。从以下试卷内容中识别所有考题，只输出JSON，不要有任何前缀、后缀或markdown代码块：
 
 {
   "questions": [
     {
       "number": "第一大题",
-      "type": "看拼音写汉字",
+      "type": "题型名称",
       "score": 10,
-      "content": "看拼音，写汉字",
-      "specificItems": ["chūn tiān→（   ）", "xiǎo gǒu→（   ）", "qīng wā→（   ）"],
-      "knowledgePoints": ["生字：春、天、狗、青、蛙（第一、三单元）"]
+      "articleCategory": "（仅阅读理解填写，如：科技类、环保类、人物传记类、日常生活类）",
+      "specificItems": ["具体小题内容或词汇"],
+      "knowledgePoints": ["考查的知识点"]
     }
-  ],
-  "knowledgeDistribution": [
-    {
-      "topic": "生字认读与书写",
-      "percentage": 30,
-      "specificContent": "本册生字：春、天、狗、草、木、禾（第一、三单元），主要以看拼音写汉字形式出现（第一题）",
-      "sourceQuestions": ["第一题", "第三题第2小题"]
-    }
-  ],
-  "questionTypes": [
-    {"type": "看拼音写汉字", "count": 8, "percentage": 20}
-  ],
-  "difficultyProfile": {
-    "basic": 60,
-    "medium": 30,
-    "hard": 10,
-    "coefficient": 0.78
-  },
-  "schoolStyle": "必须引用具体题目内容描述该校出题风格，如（该校连续三学期均在第一题考看拼音写汉字，以第一、三单元生字为主，分值稳定在10分...）",
-  "keyFocusAreas": [
-    "生字（春天狗草木禾青蛙）：占30%，连续出现在第一题",
-    "口算加减法（含进位）：占25%，集中在第二题"
-  ],
-  "weaknessPatterns": [
-    "【第一题看拼音写汉字】蛙、草等多笔画字字形复杂，笔顺易错，失分集中",
-    "【第四题阅读理解第3小题】要求写感受，学生答案空洞无具体内容，普遍失分"
-  ],
-  "suggestions": [
-    "【针对生字书写】重点练习第一、三单元多笔画字（蛙、草、禾），每字练习笔顺3遍，默写检验",
-    "【针对阅读理解感受题】训练学生用（因为...所以我觉得...）句式，结合文中具体句子表达"
   ]
 }
 
-重要约束：
-1. 只输出上述JSON，不要有任何前缀文字、后缀解释或markdown代码块
-2. 所有字符串值内不得使用英文双引号（），如需引用内容用（）括号代替
-3. 所有数值字段必须是数字
-4. suggestions必须是数组，每条一个字符串，不是一段长文`;
+重要规则：
+1. 阅读理解题：同一篇文章的所有小题合并为一个条目，不要每题单独一条；articleCategory填文章类别；specificItems列出每道小题的题号和题干（如"第21题：Which is TRUE about..."）
+2. 词汇/语法选择题：specificItems必须列出实际考查的具体单词或语法点（如"thousands of、other/another/others、be strict with"），不能只写类别
+3. 其他题型：specificItems写具体的词语/算式/句子，不写题型描述
+4. number写大题序号，score填分值（不确定写0），没有articleCategory的题目省略该字段`;
 
-// Render PDF pages to JPEG images using mupdf (no Worker needed, pure WASM)
-async function renderPdfToImages(buffer: Buffer, maxPages = 6): Promise<string[]> {
+// Render a specific page range [startPage, endPage) from a PDF buffer
+async function renderPdfPageRange(buffer: Buffer, startPage: number, endPage: number): Promise<string[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mupdf: any = await import("mupdf");
   const { Document, ColorSpace } = mupdf;
 
   const doc = Document.openDocument(buffer, "application/pdf");
-  const pageCount = Math.min(doc.countPages(), maxPages);
+  const totalPages = doc.countPages();
+  const actualEnd = Math.min(endPage, totalPages);
   const images: string[] = [];
 
-  for (let i = 0; i < pageCount; i++) {
+  for (let i = startPage; i < actualEnd; i++) {
     const page = doc.loadPage(i);
-    // Use low scale + quality to keep scanned image PDFs small
-    // Scanned PDFs can be 300+ DPI; 0.3x gives ~90 DPI equivalent — enough for Gemini OCR
-    const pixmap = page.toPixmap(
-      [0.3, 0, 0, 0.3, 0, 0],
-      ColorSpace.DeviceRGB
-    );
-    const jpeg = pixmap.asJPEG(50);
+    const pixmap = page.toPixmap([0.6, 0, 0, 0.6, 0, 0], ColorSpace.DeviceRGB);
+    const jpeg = pixmap.asJPEG(60);
     console.log(`Page ${i + 1} JPEG size: ${jpeg.length} bytes (${Math.round(jpeg.length / 1024)}KB)`);
     images.push(Buffer.from(jpeg).toString("base64"));
   }
   return images;
+}
+
+// Backward-compat wrapper
+async function renderPdfToImages(buffer: Buffer, maxPages = 6): Promise<string[]> {
+  return renderPdfPageRange(buffer, 0, maxPages);
+}
+
+// Count total pages in a PDF buffer
+async function getPdfPageCount(buffer: Buffer): Promise<number> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mupdf: any = await import("mupdf");
+  const doc = mupdf.Document.openDocument(buffer, "application/pdf");
+  return doc.countPages();
+}
+
+// Parse questions array from a raw Claude response string; returns [] on failure
+function parseQuestionsFromResponse(text: string): object[] {
+  try {
+    const stripped = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const jsonStart = stripped.indexOf("{");
+    if (jsonStart === -1) return [];
+    const repaired = jsonrepair(stripped.slice(jsonStart));
+    const data = JSON.parse(repaired);
+    return Array.isArray(data.questions) ? data.questions : [];
+  } catch {
+    return [];
+  }
+}
+
+// Parse knowledgeDistribution array from a raw Claude response string; returns [] on failure
+function parseKnowledgeDistributionFromResponse(text: string): object[] {
+  try {
+    const stripped = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const jsonStart = stripped.indexOf("{");
+    if (jsonStart === -1) return [];
+    const repaired = jsonrepair(stripped.slice(jsonStart));
+    const data = JSON.parse(repaired);
+    return Array.isArray(data.knowledgeDistribution) ? data.knowledgeDistribution : [];
+  } catch {
+    return [];
+  }
+}
+
+// Run synthesis: given extracted questions, ask Claude only for knowledgeDistribution, then merge
+async function synthesizeAnalysis(questions: object[], systemPrompt: string): Promise<string> {
+  const synthesisContent = `${systemPrompt}
+
+以下是已从试卷中识别出的全部题目：
+\`\`\`json
+${JSON.stringify(questions, null, 2)}
+\`\`\`
+
+只输出 knowledgeDistribution 的JSON（不要重新输出questions），格式：{"knowledgeDistribution":[...]}`;
+
+  const synthesisText = await callClaude([{ role: "user", content: synthesisContent }]);
+  const kd = parseKnowledgeDistributionFromResponse(synthesisText);
+  return JSON.stringify({ questions, knowledgeDistribution: kd });
+}
+
+// Main orchestrator: splits large PDFs into 3-page batches, extracts questions per batch,
+// then does a single text-only synthesis call to produce the complete analysis JSON.
+async function analyzePdfInBatches(buffer: Buffer, systemPrompt: string): Promise<string> {
+  const BATCH_SIZE = 3;
+  const totalPages = await getPdfPageCount(buffer);
+  console.log(`PDF total pages: ${totalPages}`);
+
+  // Single batch — use original vision call with full systemPrompt
+  if (totalPages <= BATCH_SIZE) {
+    const imgs = await renderPdfPageRange(buffer, 0, totalPages);
+    return callClaudeVisionSDK(systemPrompt, imgs);
+  }
+
+  // Multi-batch extraction
+  const allQuestions: object[] = [];
+
+  for (let start = 0; start < totalPages; start += BATCH_SIZE) {
+    const end = Math.min(start + BATCH_SIZE, totalPages);
+    console.log(`Extracting pages ${start + 1}–${end} / ${totalPages}...`);
+
+    try {
+      const imgs = await renderPdfPageRange(buffer, start, end);
+      const batchText = await callClaudeVisionSDK(BATCH_EXTRACT_PROMPT, imgs);
+      const questions = parseQuestionsFromResponse(batchText);
+      console.log(`  → extracted ${questions.length} questions from pages ${start + 1}–${end}`);
+      allQuestions.push(...questions);
+    } catch (err) {
+      console.warn(`Batch pages ${start + 1}–${end} failed, skipping:`, err);
+    }
+  }
+
+  // Fallback if all batches failed
+  if (allQuestions.length === 0) {
+    console.warn("All batches failed, falling back to first-3-page single call");
+    const imgs = await renderPdfPageRange(buffer, 0, BATCH_SIZE);
+    return callClaudeVisionSDK(systemPrompt, imgs);
+  }
+
+  // Synthesis: ask only for knowledgeDistribution, merge server-side
+  console.log(`Synthesis: ${allQuestions.length} questions total, generating knowledgeDistribution...`);
+  return synthesizeAnalysis(allQuestions, systemPrompt);
 }
 
 // Use pdfjs-dist directly for more robust text extraction
@@ -142,78 +207,59 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 }
 
-// Vision analysis using Gemini 2.5 Pro (supports image inputs, faster than Claude vision)
-async function callGeminiVision(systemPrompt: string, images: string[]): Promise<string> {
-  const apiKey = process.env.VISION_API_KEY!;
-  const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://us.novaiapi.com";
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 150_000);
-
-  const content: object[] = [
-    { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片，请直接从图片中识别题目内容进行分析）" },
-    ...images.map(img => ({
-      type: "image_url",
-      image_url: { url: `data:image/jpeg;base64,${img}` },
-    })),
-  ];
-
-  let res: Response;
+// Extract text from a .docx Word document using mammoth
+async function extractDocxText(buffer: Buffer): Promise<string> {
   try {
-    res = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "[次]gemini-2.5-pro",
-        max_tokens: 4096,
-        stream: false,
-        messages: [{ role: "user", content }],
-      }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mammoth: any = await import("mammoth");
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value || "";
+  } catch (err) {
+    console.warn("mammoth docx extraction failed:", err);
+    return "";
   }
-
-  if (!res.ok) throw new Error(`Vision API error ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
 }
 
-async function callClaude(messages: object[]): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY!;
-  const baseUrl = process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
+// Vision analysis via Anthropic SDK (/v1/messages) — longer proxy timeout than /v1/chat/completions
+async function callClaudeVisionSDK(systemPrompt: string, images: string[]): Promise<string> {
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+    baseURL: process.env.ANTHROPIC_BASE_URL || "https://us.novaiapi.com",
+    timeout: 180_000,
+  });
 
-  // 150-second timeout — exam PDFs can take 60-120s to analyze
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 150_000);
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "text", text: systemPrompt + "\n\n（以下是试卷扫描图片，请直接从图片中识别题目内容进行分析）" },
+        ...images.map(img => ({
+          type: "image" as const,
+          source: { type: "base64" as const, media_type: "image/jpeg" as const, data: img },
+        })),
+      ],
+    }],
+  });
 
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        stream: false,
-        messages,
-      }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  return response.content[0].type === "text" ? response.content[0].text : "";
+}
 
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+async function callClaude(messages: { role: "user" | "assistant"; content: string }[]): Promise<string> {
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+    baseURL: process.env.ANTHROPIC_BASE_URL || "https://us.novaiapi.com",
+    timeout: 240_000,
+  });
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    messages,
+  });
+
+  return response.content[0].type === "text" ? response.content[0].text : "";
 }
 
 export async function POST(req: NextRequest) {
@@ -248,38 +294,81 @@ export async function POST(req: NextRequest) {
       .replace("{{TERM}}", term || "上学期");
 
     let responseText = "";
+    const isDocx = filePath.toLowerCase().endsWith(".docx") || (fileName || "").toLowerCase().endsWith(".docx");
 
-    // Try text extraction first (works for digital PDFs)
-    let pdfText = "";
-    try {
-      pdfText = await extractPdfText(buffer);
-    } catch (e) {
-      console.warn("pdfjs text extraction failed:", e);
-    }
-
-    if (!pdfText || pdfText.trim().length < 50) {
-      if (useVision || (pageImages && Array.isArray(pageImages) && pageImages.length > 0)) {
-        // Vision mode: render PDF pages server-side (or use client-provided images)
-        const imgs: string[] = pageImages?.length > 0
-          ? pageImages
-          : await renderPdfToImages(buffer, 8);
-
-        if (imgs.length === 0) {
-          return NextResponse.json({ error: "无法渲染PDF页面，文件可能已损坏" }, { status: 400 });
-        }
-        console.log(`Vision mode (Gemini): analyzing ${imgs.length} page images`);
-        // Use Gemini 2.5 Pro for vision — supports image inputs reliably
-        responseText = await callGeminiVision(systemPrompt, imgs);
-      } else {
-        // Tell client to retry with vision mode
-        return NextResponse.json({ error: "NEEDS_VISION" }, { status: 422 });
+    if (isDocx) {
+      // Word document: chunk-based extraction + synthesize
+      const docxText = await extractDocxText(buffer);
+      if (!docxText || docxText.trim().length < 30) {
+        return NextResponse.json({ error: "Word文档内容为空或无法读取，请确认文件未损坏" }, { status: 400 });
       }
+      console.log(`Word doc text extracted: ${docxText.length} chars`);
+
+      // Step 1: extract questions — chunk if text is long
+      const CHUNK_SIZE = 6000;
+      const OVERLAP = 400;
+      const allQuestions: object[] = [];
+
+      if (docxText.length <= CHUNK_SIZE) {
+        const extractText = await callClaude([{
+          role: "user",
+          content: `${BATCH_EXTRACT_PROMPT}\n\n试卷内容：\n${docxText}`,
+        }]);
+        allQuestions.push(...parseQuestionsFromResponse(extractText));
+      } else {
+        const chunks: string[] = [];
+        let pos = 0;
+        while (pos < docxText.length) {
+          chunks.push(docxText.slice(pos, pos + CHUNK_SIZE));
+          pos += CHUNK_SIZE - OVERLAP;
+        }
+        const seen = new Set<string>();
+        for (let i = 0; i < chunks.length; i++) {
+          console.log(`Docx chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
+          const extractText = await callClaude([{
+            role: "user",
+            content: `${BATCH_EXTRACT_PROMPT}\n\n试卷内容（第${i + 1}/${chunks.length}段）：\n${chunks[i]}`,
+          }]);
+          const qs = parseQuestionsFromResponse(extractText);
+          for (const q of qs) {
+            const key = (q as { number?: string }).number ?? JSON.stringify(q);
+            if (!seen.has(key)) { seen.add(key); allQuestions.push(q); }
+          }
+        }
+      }
+      console.log(`Docx step1: extracted ${allQuestions.length} questions total`);
+
+      // Step 2: ask only for knowledgeDistribution, merge server-side
+      responseText = await synthesizeAnalysis(allQuestions, systemPrompt);
     } else {
-      // Digital PDF: send extracted text
-      responseText = await callClaude([{
-        role: "user",
-        content: `${systemPrompt}\n\n试卷内容：\n${pdfText.slice(0, 8000)}`,
-      }]);
+      // PDF path: try text extraction, fall back to vision for scanned PDFs
+      let pdfText = "";
+      try {
+        pdfText = await extractPdfText(buffer);
+      } catch (e) {
+        console.warn("pdfjs text extraction failed:", e);
+      }
+
+      if (!pdfText || pdfText.trim().length < 50) {
+        if (useVision || (pageImages && Array.isArray(pageImages) && pageImages.length > 0)) {
+          if (pageImages?.length > 0) {
+            console.log(`Vision mode (client images): analyzing ${pageImages.length} pages`);
+            responseText = await callClaudeVisionSDK(systemPrompt, pageImages);
+          } else {
+            responseText = await analyzePdfInBatches(buffer, systemPrompt);
+          }
+        } else {
+          return NextResponse.json({ error: "NEEDS_VISION" }, { status: 422 });
+        }
+      } else {
+        // Text-based PDF: extract then synthesize
+        const extractText = await callClaude([{
+          role: "user",
+          content: `${BATCH_EXTRACT_PROMPT}\n\n试卷内容：\n${pdfText.slice(0, 8000)}`,
+        }]);
+        const pdfQuestions = parseQuestionsFromResponse(extractText);
+        responseText = await synthesizeAnalysis(pdfQuestions, systemPrompt);
+      }
     }
 
     // Strip markdown code fences if present
@@ -288,19 +377,21 @@ export async function POST(req: NextRequest) {
       .replace(/```\s*/g, "")
       .trim();
 
-    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    // Find JSON start — even if truncated, jsonrepair can recover it
+    const jsonStart = stripped.indexOf("{");
+    if (jsonStart === -1) {
       console.error("No JSON in response:", responseText.slice(0, 800));
       return NextResponse.json({ error: "AI返回格式异常，请重试" }, { status: 500 });
     }
+    const jsonCandidate = stripped.slice(jsonStart);
 
     let analysis;
     try {
-      const repaired = jsonrepair(jsonMatch[0]);
+      const repaired = jsonrepair(jsonCandidate);
       analysis = JSON.parse(repaired);
     } catch (parseErr) {
       console.error("JSON parse error:", parseErr);
-      console.error("Raw JSON (first 1000):", jsonMatch[0].slice(0, 1000));
+      console.error("Raw JSON (first 1000):", jsonCandidate.slice(0, 1000));
       return NextResponse.json({ error: "AI返回JSON解析失败，请重试" }, { status: 500 });
     }
 

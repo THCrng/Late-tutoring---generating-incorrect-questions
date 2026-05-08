@@ -890,8 +890,8 @@ textarea::placeholder {
 
 .a4-page {
   width: 210mm;
-  height: 297mm;
-  overflow: hidden;
+  min-height: 297mm;
+  overflow: visible;
   padding: 14mm 18mm;
   margin: 24px auto;
   background: white;
@@ -902,6 +902,15 @@ textarea::placeholder {
   color: #111;
 }
 
+/* During PDF export: exact A4 height so html2pdf paginates at precise 297mm boundaries */
+.exporting .a4-page {
+  margin: 0 auto !important;
+  box-shadow: none !important;
+  height: 297mm !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
 /* 页眉 */
 .page-header {
   border-bottom: 2px solid #111;
@@ -909,19 +918,25 @@ textarea::placeholder {
   margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
 .page-header h2 {
-  font-size: 15pt;
+  font-size: 13pt;
   font-weight: 900;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .page-meta {
-  font-size: 10pt;
+  font-size: 9pt;
   color: #444;
   display: flex;
-  gap: 20px;
+  gap: 10px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 /* 每个知识点区块 */
@@ -1066,10 +1081,10 @@ textarea::placeholder {
     width: 100%;
     height: auto;
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
     padding: 0;
-    margin: 0;
-    box-shadow: none;
+    margin: 0 !important;
+    box-shadow: none !important;
     page-break-after: always;
     break-after: page;
   }
@@ -1098,4 +1113,181 @@ textarea::placeholder {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+/* ── 知识图谱 Tabs ── */
+.knowledge-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.knowledge-tab {
+  padding: 8px 20px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+  color: #555;
+  transition: all 0.15s;
+}
+
+.knowledge-tab:hover {
+  border-color: #1a56db;
+  color: #1a56db;
+}
+
+.knowledge-tab.active {
+  background: #1a56db;
+  border-color: #1a56db;
+  color: white;
+  font-weight: 600;
+}
+
+/* ── Tree sidebar ── */
+.tree-sidebar {
+  width: 210px;
+  flex-shrink: 0;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+  background: #f9fafb;
+}
+
+.tree-sidebar-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: background 0.1s;
+  position: relative;
+}
+
+.tree-sidebar-item:hover {
+  background: #eff6ff;
+}
+
+.tree-sidebar-item.active {
+  background: #dbeafe;
+  border-left: 3px solid #1a56db;
+}
+
+.tree-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 2px;
+}
+
+.tree-item-meta {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.tree-item-file {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 170px;
+}
+
+.tree-item-delete {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.tree-sidebar-item:hover .tree-item-delete {
+  opacity: 1;
+}
+
+/* ── Mind map container ── */
+.mindmap-container {
+  width: 100%;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.mindmap-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 13px;
+  background: white;
+}
+
+.mindmap-error {
+  padding: 32px;
+  color: #dc2626;
+  text-align: center;
+  font-size: 13px;
+}
+
+/* ── Selected nodes bar ── */
+.mindmap-selected-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: #f0f9ff;
+  min-height: 48px;
+}
+
+.mindmap-node-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  border-radius: 20px;
+  padding: 2px 10px 2px 12px;
+  font-size: 12px;
+  color: #1d4ed8;
+}
+
+.mindmap-node-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #60a5fa;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.mindmap-node-chip button:hover {
+  color: #dc2626;
+}
+
+.btn-use-nodes {
+  margin-left: auto;
+  background: #1a56db;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-use-nodes:hover {
+  background: #1e40af;
 }

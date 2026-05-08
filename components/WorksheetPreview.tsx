@@ -28,7 +28,10 @@ export interface WorksheetData {
   pages: Page[];
 }
 
-const CIRCLE_NUMS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+const CIRCLE_NUMS = [
+  "①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩",
+  "⑪","⑫","⑬","⑭","⑮","⑯","⑰","⑱","⑲","⑳",
+];
 
 function ExerciseItem({ ex }: { ex: Exercise }) {
   return (

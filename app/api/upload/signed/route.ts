@@ -8,7 +8,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少参数" }, { status: 400 });
     }
 
-    const filePath = `${Date.now()}.pdf`;
+    const ext = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")) : "";
+    const filePath = `${Date.now()}${ext}`;
 
     const { data, error } = await supabase.storage
       .from(bucket)
